@@ -1,0 +1,440 @@
+blueprint:
+  name: Climate Control
+  description: >
+    Control a climate entity based on inside and outside temperatures, 
+    prioritize PV energy usage, balance with EV charging, and minimize grid energy consumption. Includes preemptive heating if PV is available and cold weather is forecasted.
+  domain: automation
+  input:
+    climate_entity:
+      name: Climate Entity
+      description: The climate entity to control.
+      selector:
+        entity:
+          domain: climate
+    inside_temperature_sensor:
+      name: Inside Temperature Sensor
+      description: The sensor that reports the inside temperature.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    outside_temperature_sensor:
+      name: Outside Temperature Sensor
+      description: The sensor that reports the outside temperature.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    weather_forecast_sensor:
+      name: Weather Forecast Max Temperature Sensor
+      description: >
+        The sensor providing the forecasted max temperature. This is used to predict cold weather.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    datetime_helper:
+      name: datetime helper
+      description: Helper sensor suspending next runtime of automation.
+      selector:
+        entity:
+          domain: input_datetime
+    pv_surplus_sensor:
+      name: PV Surplus Sensor
+      description: Sensor showing available PV energy surplus.
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+    minimum_pv_surplus_for_preemtive_cooling:
+      name: Minimum PV Surplus for Climate Control (W) Cooling
+      description: >
+        Minimum PV energy surplus needed for climate control to use excess energy for cooling.
+      default: 500
+      selector:
+        number:
+          min: 100
+          max: 5000
+          unit_of_measurement: W
+    minimum_pv_surplus_for_preemtive_heating:
+      name: Minimum PV Surplus for Climate Control (W) Heating
+      description: >
+        Minimum PV energy surplus needed for climate control to use excess energy for heating.
+      default: 500
+      selector:
+        number:
+          min: 100
+          max: 5000
+          unit_of_measurement: W
+    preemtive_heating_threshold:
+      name: Preemtive heating threshold (°C)
+      description: The temperature above which preemtive heating won't be triggered.
+      default: 22
+      selector:
+        number:
+          min: 0
+          max: 40
+          unit_of_measurement: °C
+    preemtive_cooling_threshold:
+      name: Preemtive cooling threshold (°C)
+      description: The temperature below which preemtive cooling won't be triggered.
+      default: 22
+      selector:
+        number:
+          min: 0
+          max: 40
+          unit_of_measurement: °C
+    heating_threshold:
+      name: Heating Threshold (°C)
+      description: The temperature below which heating will be triggered.
+      default: 18
+      selector:
+        number:
+          min: 0
+          max: 40
+          unit_of_measurement: °C
+    cooling_threshold:
+      name: Cooling Threshold (°C)
+      description: The temperature above which cooling or ventilation will be triggered.
+      default: 28
+      selector:
+        number:
+          min: 0
+          max: 40
+          unit_of_measurement: °C
+    target_temp_for_heating:
+      name: target temperature for heating (°C)
+      description: Used as target for heating and comparision for the outside temperature above which ventilation will be preferred over heating.
+      default: 20
+      selector:
+        number:
+          min: 0
+          max: 40
+          unit_of_measurement: °C
+    target_temp_for_cooling:
+      name: target temperature for cooling (°C)
+      description: Used as target for cooling and comparision for the outside temperature below which ventilation will be preferred over cooling.
+      default: 26
+      selector:
+        number:
+          min: 0
+          max: 40
+          unit_of_measurement: °C
+    change_frequency:
+      name: Delay in minutes after an adjustment until a new adjustment is done
+      description: Minutes will be added to the actual time. Next adjustment will be done after this amount of minutes.
+      default: 15
+      selector:
+        number:
+          min: 0
+          max: 120
+          unit_of_measurement: min
+
+#heating_threshold 18
+#cooling_threshold 28
+#target_temp_for_heating 20
+#target_temp_for_cooling 26
+
+variables:
+  inside_temperature_sensor: !input inside_temperature_sensor
+  outside_temperature_sensor: !input outside_temperature_sensor
+  weather_forecast_sensor: !input weather_forecast_sensor
+  pv_surplus_sensor: !input pv_surplus_sensor
+  minimum_pv_surplus_for_preemtive_cooling: !input minimum_pv_surplus_for_preemtive_cooling
+  minimum_pv_surplus_for_preemtive_heating: !input minimum_pv_surplus_for_preemtive_heating
+  preemtive_heating_threshold: !input preemtive_heating_threshold
+  preemtive_cooling_threshold: !input preemtive_cooling_threshold
+  heating_threshold: !input heating_threshold
+  cooling_threshold: !input cooling_threshold
+  target_temp_for_heating: !input target_temp_for_heating
+  target_temp_for_cooling: !input target_temp_for_cooling
+  datetime_helper: !input datetime_helper
+  change_frequency: !input change_frequency
+
+trigger:
+  - platform: homeassistant
+    event: start
+  - platform: event
+    event_type: automation_reloaded
+  - platform: time
+    at: !input datetime_helper
+
+condition:
+  - condition: time
+    after: !input datetime_helper
+
+action:
+  - choose:
+      # Condition 0: Inside temperature is below the heating threshold -> Heating or ventilation
+      - conditions:
+          - condition: template
+            value_template: "{{ (states(inside_temperature_sensor)|float) <= heating_threshold }}"
+        sequence:
+          - choose:
+              # Sub-condition 0: Prioritize ventilation if outside temperature is high enough
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (states(outside_temperature_sensor)|float) >= target_temp_for_heating }}"
+                sequence:
+                  - action: climate.set_temperature
+                    target:
+                      entity_id: !input climate_entity
+                    data:
+                      hvac_mode: 'fan_only'
+                      temperature: "{{ target_temp_for_heating }}"
+                  - action: logbook.log
+                    data:
+                      name: "Climate Control"
+                      message: "Inside temperature is to low. Outside temperature high. Climate mode switched to ventilation."
+                      entity_id: !input climate_entity
+            # Sub default: Heating needed
+            default:
+              - action: climate.set_temperature
+                target:
+                  entity_id: !input climate_entity
+                data:
+                  hvac_mode: 'heat'
+                  temperature: "{{ target_temp_for_heating }}"
+              - action: logbook.log
+                data:
+                  name: "Climate Control"
+                  message: "Inside temperature is to low. Climate mode switched to heating."
+                  entity_id: !input climate_entity
+
+      # Condition 1: Inside temperature is above the cooling threshold -> Cooling or ventilation
+      - conditions:
+          - condition: template
+            value_template: "{{ (states(inside_temperature_sensor)|float) >= cooling_threshold }}"
+        sequence:
+          - choose:
+              # Sub-condition 0: Prioritize ventilation if outside temperature is low enough
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (states(outside_temperature_sensor)|float) <= target_temp_for_cooling }}"
+                sequence:
+                  - action: climate.set_temperature
+                    target:
+                      entity_id: !input climate_entity
+                    data:
+                      hvac_mode: 'fan_only'
+                      temperature: "{{ target_temp_for_cooling }}"
+                  - action: logbook.log
+                    data:
+                      name: "Climate Control"
+                      message: "Inside temperature is to high. Outside temperature low. Climate mode switched to ventilation."
+                      entity_id: !input climate_entity
+            # Sub default: Cooling needed
+            default:
+              - action: climate.set_temperature
+                target:
+                  entity_id: !input climate_entity
+                data:
+                  hvac_mode: 'cool'
+                  temperature: "{{ target_temp_for_cooling }}"
+              - action: logbook.log
+                data:
+                  name: "Climate Control"
+                  message: "Inside temperature is to high. Climate mode switched to cooling."
+                  entity_id: !input climate_entity
+
+      # Condition 2: Inside temperature is between heating and cooling thresholds -> Ventilation or Cooling/Heating based on PV surplus
+      - conditions:
+          - condition: template
+            value_template: "{{ (states(inside_temperature_sensor)|float) > heating_threshold }}"
+          - condition: template
+            value_template: "{{ (states(inside_temperature_sensor)|float) < cooling_threshold }}"
+        sequence:
+          - choose:
+              # Sub-condition 1: Temperature forecast above cooling threshold: preemtive cooling could be usefull
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (states(weather_forecast_sensor)|float) >= preemtive_cooling_threshold }}"
+                    #cooling_threshold
+                sequence:
+                  - choose:
+                      # Sub-sub-condition 0: Preemtive cooling threshould hit. Switch off
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ (states(inside_temperature_sensor)|float) <= preemtive_cooling_threshold }}"
+                        sequence:
+                          - action: climate.set_temperature
+                            target:
+                              entity_id: !input climate_entity
+                            data:
+                              hvac_mode: 'off'
+                              temperature: "{{ target_temp_for_cooling }}"
+                          - action: logbook.log
+                            data:
+                              name: "Climate Control"
+                              message: "High temperature progozed but preemtive cooling limit reached. Climate mode switched to off."
+                              entity_id: !input climate_entity
+                      # Sub-sub-condition 1: Prioritize ventilation if outside temperature is low enough
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ (states(outside_temperature_sensor)|float) <= target_temp_for_cooling }}"
+                          - condition: template
+                            value_template: "{{ (states(outside_temperature_sensor)|float) < inside_temperature_sensor }}"
+                        sequence:
+                          - action: climate.set_temperature
+                            target:
+                              entity_id: !input climate_entity
+                            data:
+                              hvac_mode: 'fan_only'
+                              temperature: "{{ target_temp_for_cooling }}"
+                          - action: logbook.log
+                            data:
+                              name: "Climate Control"
+                              message: "High temperature progozed. Outside temperature low and lower than outside. Climate mode switched to ventilation."
+                              entity_id: !input climate_entity
+                      # Sub-sub-condition 2: Cooling if enough PV surplus available
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ (states(pv_surplus_sensor)|float) >= minimum_pv_surplus_for_preemtive_cooling }}"
+                        sequence:
+                          - action: climate.set_temperature
+                            target:
+                              entity_id: !input climate_entity
+                            data:
+                              hvac_mode: 'cool'
+                              temperature: "{{ target_temp_for_cooling }}"
+                          - action: logbook.log
+                            data:
+                              name: "Climate Control"
+                              message: "High temperature progozed. PV surplus available. Climate mode switched to cool."
+                              entity_id: !input climate_entity
+                    # Sub-sub default: Preemtive cooling not possible. Switch off
+                    default:
+                      - action: climate.set_temperature
+                        target:
+                          entity_id: !input climate_entity
+                        data:
+                          hvac_mode: 'off'
+                          temperature: "{{ target_temp_for_cooling }}"
+                      - action: logbook.log
+                        data:
+                          name: "Climate Control"
+                          message: "High temperature progozed, but preemtive cooling not possible. Climate mode switched to off."
+                          entity_id: !input climate_entity
+
+              # Sub-condition 1: Temperature forecast below heating threshold: preemtive heating could be usefull
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (states(weather_forecast_sensor)|float) <= heating_threshold }}"
+                sequence:
+                  - choose:
+                      # Sub-sub-condition 0: Preemtive heating threshould hit. Switch off
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ (states(inside_temperature_sensor)|float) >= preemtive_heating_threshold }}"
+                        sequence:
+                          - action: climate.set_temperature
+                            target:
+                              entity_id: !input climate_entity
+                            data:
+                              hvac_mode: 'off'
+                              temperature: "{{ target_temp_for_heating }}"
+                          - action: logbook.log
+                            data:
+                              name: "Climate Control"
+                              message: "Low temperature progozed but preemtive heating limit reached. Climate mode switched to off."
+                              entity_id: !input climate_entity
+                      # Sub-sub-condition 1: Prioritize ventilation if outside temperature is high enough
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ (states(outside_temperature_sensor)|float) >= target_temp_for_heating }}"
+                          - condition: template
+                            value_template: "{{ (states(outside_temperature_sensor)|float) > inside_temperature_sensor }}"
+                        sequence:
+                          - action: climate.set_temperature
+                            target:
+                              entity_id: !input climate_entity
+                            data:
+                              hvac_mode: 'fan_only'
+                              temperature: "{{ target_temp_for_heating }}"
+                          - action: logbook.log
+                            data:
+                              name: "Climate Control"
+                              message: "Low temperature progozed. Outside temperature high and higher than inside. Climate mode switched to ventilation."
+                              entity_id: !input climate_entity
+
+                      # Sub-sub-condition 2: Heating if enough PV surplus available
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ (states(pv_surplus_sensor)|float) >= minimum_pv_surplus_for_preemtive_heating }}"
+                        sequence:
+                          - action: climate.set_temperature
+                            target:
+                              entity_id: !input climate_entity
+                            data:
+                              hvac_mode: 'heat'
+                              temperature: "{{ target_temp_for_heating }}"
+                          - action: logbook.log
+                            data:
+                              name: "Climate Control"
+                              message: "High temperature progozed. PV surplus available. Climate mode switched to cool."
+                              entity_id: !input climate_entity
+
+                    # Sub-sub default: Preemtive heating not possible. Switch off
+                    default:
+                      - action: climate.set_temperature
+                        target:
+                          entity_id: !input climate_entity
+                        data:
+                          hvac_mode: 'off'
+                          temperature: "{{ target_temp_for_heating }}"
+                      - action: logbook.log
+                        data:
+                          name: "Climate Control"
+                          message: "Low temperature progozed, but preemtive heating not possible. Climate mode switched to off."
+                          entity_id: !input climate_entity
+
+              # Sub-condition 2: Forecast beween heating and cooling threshold. Ventilation can be done later: switch off for now
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (states(weather_forecast_sensor)|float) > heating_threshold }}"
+                  - condition: template
+                    value_template: "{{ (states(weather_forecast_sensor)|float) < cooling_threshold }}"
+                sequence:
+                  - action: climate.set_hvac_mode
+                    target:
+                      entity_id: !input climate_entity
+                    data:
+                      hvac_mode: 'off'
+                  - action: logbook.log
+                    data:
+                      name: "Climate Control"
+                      message: "Progozed temperature seem to allow ventilation later. Climate mode switched to off."
+                      entity_id: !input climate_entity
+            default:
+              - action: climate.set_hvac_mode
+                target:
+                  entity_id: !input climate_entity
+                data:
+                  hvac_mode: 'off'
+              - action: logbook.log
+                data:
+                  name: "Climate Control"
+                  message: "Progozed temperature possible but default selected. Climate mode switched to off."
+                  entity_id: !input climate_entity
+    default:
+      - action: climate.set_hvac_mode
+        target:
+          entity_id: !input climate_entity
+        data:
+          hvac_mode: 'off'
+      - action: logbook.log
+        data:
+          name: "Climate Control"
+          message: "Defaul selected. Climate mode switched to off."
+          entity_id: !input climate_entity
+          
+  - action: input_datetime.set_datetime
+    target:
+      entity_id: !input datetime_helper
+    data:
+      timestamp: "{{ now().timestamp() + (change_frequency*60) }}"
+  - action: climate.set_fan_mode
+    target:
+      entity_id: !input climate_entity
+    data:
+      fan_mode: auto
