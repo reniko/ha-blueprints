@@ -363,7 +363,7 @@ action:
                       # Sub-sub-condition 2: Heating if enough PV surplus available
                       - conditions:
                           - condition: template
-                            value_template: "{{ (states(pv_surplus_sensor)|float(0) >= minimum_pv_surplus_for_preemtive_heating }}"
+                            value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_heating }}"
                         sequence:
                           - action: climate.set_temperature
                             target:
