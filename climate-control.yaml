@@ -286,7 +286,7 @@ action:
                           - condition: template
                             value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_heating }}"
                           - condition: template
-                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_heating*change_frequency)/60"
+                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_heating*change_frequency)/60 }}"
                         sequence:
                           - action: climate.set_temperature
                             target:
@@ -358,7 +358,7 @@ action:
                           - condition: template
                             value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_cooling }}"
                           - condition: template
-                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_cooling*change_frequency)/60"
+                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_cooling*change_frequency)/60 }}"
                         sequence:
                           - action: climate.set_temperature
                             target:
@@ -420,7 +420,7 @@ action:
                                   - condition: template
                                     value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_cooling }}"
                                   - condition: template
-                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_cooling*change_frequency)/60"
+                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_cooling*change_frequency)/60 }}"
                                 sequence:
                                   - action: climate.set_temperature
                                     target:
@@ -433,19 +433,19 @@ action:
                                       name: "Climate Control"
                                       message: "Inside: ok ({{(states(inside_temperature_sensor))}}). Forecast: high ({{(states(weather_forecast_max_sensor))}}). Surplus: available ({{(states(pv_surplus_sensor))}}) -> Mode: cool."
                                       entity_id: !input climate_entity
-                        # SubSub Condition 0 default: Preemtive cooling not possible. Switch off
-                        default:
-                          - action: climate.set_temperature
-                            target:
-                              entity_id: !input climate_entity
-                            data:
-                              hvac_mode: 'off'
-                              temperature: "{{ cooling_temperature }}"
-                          - action: logbook.log
-                            data:
-                              name: "Climate Control"
-                              message: "Inside: ok ({{(states(inside_temperature_sensor))}}). Forecast: high ({{(states(weather_forecast_max_sensor))}}). Preemtive cooling not possible --> Mode: off."
-                              entity_id: !input climate_entity
+                            # SubSub Condition 0 default: Preemtive cooling not possible. Switch off
+                            default:
+                              - action: climate.set_temperature
+                                target:
+                                  entity_id: !input climate_entity
+                                data:
+                                  hvac_mode: 'off'
+                                  temperature: "{{ cooling_temperature }}"
+                              - action: logbook.log
+                                data:
+                                  name: "Climate Control"
+                                  message: "Inside: ok ({{(states(inside_temperature_sensor))}}). Forecast: high ({{(states(weather_forecast_max_sensor))}}). Preemtive cooling not possible --> Mode: off."
+                                  entity_id: !input climate_entity
 
                       # SubSub-condition 1: Temperature forecast below preemtive heating threshold: preemtive heating could be usefull
                       - conditions:
@@ -458,7 +458,7 @@ action:
                                   - condition: template
                                     value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_heating }}"
                                   - condition: template
-                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_heating*change_frequency)/60"
+                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_heating*change_frequency)/60 }}"
                                 sequence:
                                   - action: climate.set_temperature
                                     target:
@@ -471,19 +471,19 @@ action:
                                       name: "Climate Control"
                                       message: "Inside: ok ({{(states(inside_temperature_sensor))}}). Forecast: low ({{(states(weather_forecast_max_sensor))}}). Surplus: available ({{(states(pv_surplus_sensor))}}) -> Mode: heat."
                                       entity_id: !input climate_entity
-                        # SubSub Condition 0 default: Preemtive heating not possible. Switch off
-                        default:
-                          - action: climate.set_temperature
-                            target:
-                              entity_id: !input climate_entity
-                            data:
-                              hvac_mode: 'off'
-                              temperature: "{{ heating_temperature }}"
-                          - action: logbook.log
-                            data:
-                              name: "Climate Control"
-                              message: "Inside: ok ({{(states(inside_temperature_sensor))}}). Forecast: low ({{(states(weather_forecast_max_sensor))}}). Preemtive heating not possible --> Mode: off."
-                              entity_id: !input climate_entity
+                            # SubSub Condition 0 default: Preemtive heating not possible. Switch off
+                            default:
+                              - action: climate.set_temperature
+                                target:
+                                  entity_id: !input climate_entity
+                                data:
+                                  hvac_mode: 'off'
+                                  temperature: "{{ heating_temperature }}"
+                              - action: logbook.log
+                                data:
+                                  name: "Climate Control"
+                                  message: "Inside: ok ({{(states(inside_temperature_sensor))}}). Forecast: low ({{(states(weather_forecast_max_sensor))}}). Preemtive heating not possible --> Mode: off."
+                                  entity_id: !input climate_entity
 
                     # Sub condition 2 default: Preemtive heating/cooling not possible. Switch off
                     default:
