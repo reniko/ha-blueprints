@@ -464,7 +464,7 @@ action:
                                     target:
                                       entity_id: !input climate_entity
                                     data:
-                                      hvac_mode: 'cool'
+                                      hvac_mode: 'heat'
                                       temperature: "{{ heating_temperature }}"
                                   - action: logbook.log
                                     data:
