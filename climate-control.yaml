@@ -151,7 +151,7 @@ variables:
   outside_temperature_sensor: !input outside_temperature_sensor
   weather_forecast_max_sensor: !input weather_forecast_max_sensor
   pv_surplus_sensor: !input pv_surplus_sensor
-  pv_remaining_surplus_sensor: !input pv_remaining_surplus_sensor * 1000
+  pv_remaining_surplus_sensor: !input pv_remaining_surplus_sensor
   minimum_pv_surplus_for_preemtive_cooling: !input minimum_pv_surplus_for_preemtive_cooling
   minimum_pv_surplus_for_preemtive_heating: !input minimum_pv_surplus_for_preemtive_heating
   cooling_threshold: !input cooling_threshold
@@ -286,7 +286,7 @@ action:
                           - condition: template
                             value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_heating }}"
                           - condition: template
-                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_heating*change_frequency)/60 }}"
+                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemtive_heating*change_frequency)/60 }}"
                         sequence:
                           - action: climate.set_temperature
                             target:
@@ -358,7 +358,7 @@ action:
                           - condition: template
                             value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_cooling }}"
                           - condition: template
-                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_cooling*change_frequency)/60 }}"
+                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemtive_cooling*change_frequency)/60 }}"
                         sequence:
                           - action: climate.set_temperature
                             target:
@@ -420,7 +420,7 @@ action:
                                   - condition: template
                                     value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_cooling }}"
                                   - condition: template
-                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_cooling*change_frequency)/60 }}"
+                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemtive_cooling*change_frequency)/60 }}"
                                 sequence:
                                   - action: climate.set_temperature
                                     target:
@@ -458,7 +458,7 @@ action:
                                   - condition: template
                                     value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_heating }}"
                                   - condition: template
-                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) > (minimum_pv_surplus_for_preemtive_heating*change_frequency)/60 }}"
+                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemtive_heating*change_frequency)/60 }}"
                                 sequence:
                                   - action: climate.set_temperature
                                     target:
