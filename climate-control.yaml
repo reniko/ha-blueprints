@@ -12,21 +12,21 @@ blueprint:
         entity:
           domain: climate
     inside_temperature_sensor:
-      name: Inside Temperature Sensor
+      name: Inside Temperature Sensor (°C)
       description: The sensor that reports the inside temperature.
       selector:
         entity:
           domain: sensor
           device_class: temperature
     outside_temperature_sensor:
-      name: Outside Temperature Sensor
+      name: Outside Temperature Sensor (°C)
       description: The sensor that reports the outside temperature.
       selector:
         entity:
           domain: sensor
           device_class: temperature
     weather_forecast_max_sensor:
-      name: Weather Forecast Max Temperature Sensor
+      name: Weather Forecast Max Temperature Sensor (°C)
       description: >
         The sensor providing the forecasted max temperature. This is used to predict cold weather.
       selector:
@@ -40,14 +40,14 @@ blueprint:
         entity:
           domain: input_datetime
     pv_surplus_sensor:
-      name: PV Surplus Sensor
-      description: Sensor showing available PV energy surplus.
+      name: PV current available Surplus Sensor (W)
+      description: Sensor showing current available PV energy surplus.
       selector:
         entity:
           domain: sensor
           device_class: power
     pv_remaining_surplus_sensor:
-      name: PV Remaining Surplus Sensor
+      name: PV Remaining Surplus Sensor (kWh)
       description: Sensor showing remaining PV energy surplus for today.
       selector:
         entity:
@@ -151,7 +151,7 @@ variables:
   outside_temperature_sensor: !input outside_temperature_sensor
   weather_forecast_max_sensor: !input weather_forecast_max_sensor
   pv_surplus_sensor: !input pv_surplus_sensor
-  pv_remaining_surplus_sensor: !input pv_remaining_surplus_sensor 
+  pv_remaining_surplus_sensor: !input pv_remaining_surplus_sensor * 1000
   minimum_pv_surplus_for_preemtive_cooling: !input minimum_pv_surplus_for_preemtive_cooling
   minimum_pv_surplus_for_preemtive_heating: !input minimum_pv_surplus_for_preemtive_heating
   cooling_threshold: !input cooling_threshold
