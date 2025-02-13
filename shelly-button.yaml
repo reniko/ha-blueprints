@@ -1,0 +1,77 @@
+blueprint:
+  name: Shelly Button
+  description: "Blueprint for Shelly Button with multiple press types"
+  domain: automation
+  input:
+    shelly_button:
+      name: Shelly Button
+      description: "The Shelly Button to use"
+      selector:
+        device:
+          integration: bthome
+    press_action:
+      name: Press Action
+      description: "Action to perform on single press"
+      selector:
+        action: {}
+      default: []
+    double_press_action:
+      name: Double Press Action
+      description: "Action to perform on double press"
+      selector:
+        action: {}
+      default: []
+    triple_press_action:
+      name: Triple Press Action
+      description: "Action to perform on triple press"
+      selector:
+        action: {}
+      default: []
+    long_press_action:
+      name: Long Press Action
+      description: "Action to perform on long press"
+      selector:
+        action: {}
+      default: []
+
+triggers:
+  - trigger: device
+    device_id: !input shelly_button
+    domain: bthome
+    type: button
+    subtype: press
+  - trigger: device
+    device_id: !input shelly_button
+    domain: bthome
+    type: button
+    subtype: double_press
+  - trigger: device
+    device_id: !input shelly_button
+    domain: bthome
+    type: button
+    subtype: triple_press
+  - trigger: device
+    device_id: !input shelly_button
+    domain: bthome
+    type: button
+    subtype: long_press
+
+actions:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.event_type == 'press' }}"
+        sequence: !input press_action
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.event_type == 'double_press' }}"
+        sequence: !input double_press_action
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.event_type == 'triple_press' }}"
+        sequence: !input triple_press_action
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.event_type == 'long_press' }}"
+        sequence: !input long_press_action
+mode: single
