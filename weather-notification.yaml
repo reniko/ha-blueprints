@@ -1,0 +1,81 @@
+blueprint:
+  name: Weather Notification Automation
+  description: Send weather notifications based on the content of an input_text entity or on a time schedule.
+  domain: automation
+  input:
+    text_input_entity:
+      name: Text Input Entity
+      description: The input_text entity to check for weather information.
+      selector:
+        entity:
+          domain: input_text
+    notify_target:
+      name: Notification Service
+      description: The notification service to send messages to (e.g., notify.notification_niko).
+      selector:
+        text: {}
+    time_interval:
+      name: Time Interval
+      description: The time pattern (e.g. '/5') to trigger the automation.
+      default: "/5"
+      selector:
+        text: {}
+    notification_tag:
+      name: Notification Tag
+      description: The tag to assign to the notification.
+      default: "niederschlag"
+      selector:
+        text: {}
+    notification_channel:
+      name: Notification Channel
+      description: The channel to assign to the notification.
+      default: "wetter"
+      selector:
+        text: {}
+    notification_title:
+      name: Notification Title
+      description: The title for the notification.
+      default: "Niederschlag vorhergesagt"
+      selector:
+        text: {}
+        
+mode: single
+
+trigger:
+  - platform: state
+    entity_id: !input text_input_entity
+  - trigger: time_pattern
+    minutes: !input time_interval
+
+variables:
+  text_input_entity: !input text_input_entity
+  notify_service: !input notify_target
+  time_interval_minutes: !input time_interval
+  notification_tag: !input notification_tag
+  notification_channel: !input notification_channel
+  notification_title: !input notification_title
+
+action:
+  - choose:
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: template
+                value_template: "{{ states(text_input_entity) | length > 0 }}"
+        sequence:
+          - service: "{{ notify_service }}"
+            data:
+              message: "{{ states(text_input_entity) }}"
+              title: "{{ notification_title }}"
+              data:
+                tag: "{{ notification_tag }}"
+                sticky: false
+                channel: "{{ notification_channel }}"
+    default:
+      - service: "{{ notify_service }}"
+        data:
+          message: "clear_notification"
+          data:
+            tag: "{{ notification_tag }}"
+            sticky: false
+            channel: "{{ notification_channel }}"
