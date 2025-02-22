@@ -1,0 +1,166 @@
+blueprint:
+  name: Openmeteo Regensensor - Text
+  description: Assign text to input_text based on a openweather rest sensor
+  domain: automation
+  input:
+    text_input:
+      name: Text Input
+      description: The input_text entity to assign text to
+      selector:
+        entity:
+          domain: input_text
+    sensor_input:
+      name: Sensor Input
+      description: The sensor entity to get values from
+      selector:
+        entity:
+          domain: sensor
+          integration: rest
+    time_window:
+      name: Time Window
+      description: The time window (in hours) to track precipitation (default is 3 hours)
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 24
+          step: 1
+          unit_of_measurement: hours
+
+mode: single
+
+trigger:
+  - platform: state
+    entity_id: !input sensor_input
+
+variables:
+  sensor_entity: !input sensor_input
+  time_window: !input time_window
+
+action:
+  - service: input_text.set_value
+    target:
+      entity_id: !input text_input
+    data:
+      value: >
+        {% set forecast = state_attr(sensor_entity, 'minutely_15') %}
+        {% if forecast %}
+          {% set cutoff= now() + timedelta(hours=time_window) %}
+          {% set time = forecast['time'] %}
+          {% set precipitation = forecast['precipitation'] %}
+          {% set rain = forecast['rain'] %}
+          {% set snowfall = forecast['snowfall'] %}
+          {% set sunshine_duration = forecast['sunshine_duration'] %}
+          {% set weather_code = forecast['weather_code'] %}
+          {% set length = time | length %}
+          {% set my_list = namespace(value=[]) %}
+          
+          {% for i in range(length) %}
+            {% set timestamp = (as_datetime(time[i]) | as_local).isoformat() %}
+            {% set temp = {
+              'precipitation': precipitation[i], 
+              'rain': rain[i], 
+              'snowfall': snowfall[i], 
+              'sunshine_duration': sunshine_duration[i], 
+              'weather_code': weather_code[i]
+            } %}
+            {% set my_list.value = my_list.value + [(timestamp, temp)] %}
+          {%- endfor %}
+          
+          {% set my_dict = dict(my_list.value) %}
+          {% set forecast = my_dict %}
+          
+          {% set now = as_datetime(now()) %}
+          
+          {# Initialize variables for tracking rain/snow periods #}
+          {% set periods = namespace(final=[], current={}, total_rain=0, total_snow=0, total_precipitation=0, text="") %}
+          
+          {# Iterate through the forecast items #}
+          {% for timestamp, details in forecast.items() %}
+            {% set forecast_time = as_datetime(timestamp) %}
+            {% if now <= forecast_time + timedelta(minutes=15) <= cutoff %}
+              {% set rain = details.rain or 0 %}
+              {% set snow = details.snowfall or 0 %}
+              {% set precipitation = details.precipitation or 0 %}
+
+              {% if precipitation > 0 or snow > 0 or rain > 0 %}
+                {% set periods.total_rain = (periods.total_rain + rain|float)|round(1) %}
+                {% set periods.total_snow = (periods.total_snow + snow|float)|round(1) %}
+                {% set periods.total_precipitation = (periods.total_precipitation + precipitation|float)|round(1) %}
+                {% if periods.current | length == 0 %}
+                  {% set periods.current = {
+                    "start": timestamp, 
+                    "rain": rain|float|round(1),
+                    "snow": snow|float|round(1),
+                    "precipitation": precipitation|float|round(1),
+                    "end": none
+                  } %}
+                {% else %}
+                  {% set periods.current = {
+                    "start": periods.current['start'],
+                    "rain": (periods.current['rain']|float + rain|float)|round(1),
+                    "snow": (periods.current['snow']|float + snow|float)|round(1),
+                    "precipitation": (periods.current['precipitation']|float + precipitation|float)|round(1),
+                    "end": none
+                  } %}
+                {% endif %}
+              {% else %}
+                {% if periods.current | length > 0 %}
+                  {% set periods.current = {
+                    "start": periods.current['start'],
+                    "rain": periods.current['rain'],
+                    "snow": periods.current['snow'],
+                    "precipitation": periods.current['precipitation'],
+                    "end": timestamp
+                  } %}
+                  {% set periods.final = periods.final + [periods.current] %}
+                  {% set periods.current = {} %}
+                {% endif %}
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+          
+          {# Finalize the last active period, if any #}
+          {% if periods.current | length > 0 %}
+            {% set periods.current = {
+              "start": periods.current['start'],
+              "rain": periods.current['rain'],
+              "snow": periods.current['snow'],
+              "precipitation": periods.current['precipitation'],
+              "end": none
+            } %}
+            {% set periods.final = periods.final + [periods.current] %}
+            {% set periods.current = {} %}
+          {% endif %}
+          
+          {# Generate the output #}
+          {% set periods.text = "" %}
+          {% if periods.final | length > 0 %}
+            {% for period in periods.final %}
+              {% if periods.text|length > 0 %}
+                {% set periods.text = periods.text + "\n" %}
+              {% endif %}
+              {% if periods.total_rain > 0 and periods.total_snow > 0 %}
+                {% set periods.text = periods.text + "Regen (" + period.rain|string + " mm) und Schnee (" + period.snow|string + " cm)" %}
+              {% elif periods.total_rain > 0 %}
+                {% set periods.text = periods.text + "Regen (" + period.rain|string + " mm)" %}
+              {% elif periods.total_snow > 0 %}
+                {% set periods.text = periods.text + "Schnee (" + period.snow|string + " cm)" %}
+              {% else %}
+                {% set periods.text = periods.text + "Niederschlag (" + period.precipitation|string + " mm)" %}
+              {% endif %}
+              {% if period.end is none or as_datetime(period.end).strftime("%H:%M") is none %}
+                {% set periods.text = periods.text + " ab " + as_datetime(period.start).strftime("%H:%M") %}
+              {% else %}
+                {% set periods.text = periods.text + " von " + as_datetime(period.start).strftime("%H:%M") + " bis " + as_datetime(period.end).strftime("%H:%M") %}
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            {% set periods.text = "Kein Niederschlag in den nächsten " + time_window|string + " Stunden" %}
+            {% set periods.text = "" %}
+          {% endif %}
+          
+          {{ periods.text }}
+        {% else %}
+          Keine Wetterdaten verfügbar
+        {% endif %}
