@@ -487,15 +487,12 @@ action:
                       {% set text = text + '\n' + energy_notification_text + energy_consumed + ' kWh' %}
                     {% endif %}
 
-                    {% if track_cycles == true %}
+                    {% if add_cycle_tracking_to_end_notification == true %}
                       {% set cycles = dict_var.cycles | string %}
                       {% set text = text + '\n' + cycle_notification_text + cycles%}
                     {% endif %}
 
                     {{ text }}
-
-                    {% set message = namespace(text='') %}
-
                   title: "{{ notification_title_end }}"
                   data:
                     tag: "{{ notification_tag }}"
