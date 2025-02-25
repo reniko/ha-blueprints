@@ -5,13 +5,12 @@ blueprint:
     reminder_time:
       name: Reminder time
       description: At what time the day before do you want to be reminded
-      default: "18:00:00"
+      default: '18:00:00'
       selector:
         time: {}
     day_offset:
       name: Day offset
-      description:
-        Amount of days to be added to the triggers date to check for sensor
+      description: Amount of days to be added to the triggers date to check for sensor
         value matches. E.g. 1 to be notified the day before or 0 for notification
         on the garbage collection day.
       default: 1
@@ -22,64 +21,65 @@ blueprint:
     reminder_message:
       name: Reminder message
       description: Accompanying text in the notification
-      default: "The following garbage will be picked up tomorrow: "
+      default: 'The following garbage will be picked up tomorrow: '
     notifier:
       name: Notifier
       description: Name of integration you prefer to use for notifications. E.g. notify.notify
       default: notify.notify
     garbage_sensor_1:
       name: Garbage sensor 1
-      description:
-        Sensor should be a date string formatted according to the date
+      description: Sensor should be a date string formatted according to the date
         format input
-      default: ""
+      default: ''
       selector:
         entity:
           filter:
-            - domain: sensor
+          - domain:
+            - sensor
           multiple: false
     garbage_sensor_2:
       name: Garbage sensor 2
-      description:
-        Sensor should be a date string formatted according to the date
+      description: Sensor should be a date string formatted according to the date
         format input
-      default: ""
+      default: ''
       selector:
         entity:
           filter:
-            - domain: sensor
+          - domain:
+            - sensor
           multiple: false
     garbage_sensor_3:
       name: Garbage sensor 3
-      description:
-        Sensor should be a date string formatted according to the date
+      description: Sensor should be a date string formatted according to the date
         format input
-      default: ""
+      default: ''
       selector:
         entity:
           filter:
-            - domain: sensor
+          - domain:
+            - sensor
           multiple: false
     garbage_sensor_4:
       name: Garbage sensor 4
-      description:
-        Sensor should be a date string formatted according to the date
+      description: Sensor should be a date string formatted according to the date
         format input
-      default: ""
+      default: ''
       selector:
         entity:
           filter:
-            - domain: sensor
+          - domain:
+            - sensor
           multiple: false
     garbage_sensor_date_attib:
       name: Reminder title
-      description: name of the attribute of the garbage sensors containing the next date attribute
+      description: name of the attribute of the garbage sensors containing the next
+        date attribute
       default: next_date
     garbage_sensor_date_format:
       name: Garbage sensor date format
       description: Valid strftime date format. Default %Y-%m-%d
-      default: "%Y-%m-%d"
-
+      default: '%Y-%m-%d'
+  source_url: https://github.com/reniko/ha-blueprints/blob/main/garbage-reminder.yaml
 variables:
   garbage_sensor_1: !input garbage_sensor_1
   garbage_sensor_2: !input garbage_sensor_2
@@ -90,15 +90,22 @@ variables:
   day_offset: !input day_offset
   garbage_sensor_date_format: !input garbage_sensor_date_format
   garbage_sensor_date_attib: !input garbage_sensor_date_attib
-  sensors_tomorrow: "{{ [(state_attr(garbage_sensor_1, 'friendly_name'), (state_attr(garbage_sensor_1, garbage_sensor_date_attib))), (state_attr(garbage_sensor_2, 'friendly_name'), (state_attr(garbage_sensor_2, garbage_sensor_date_attib))), (state_attr(garbage_sensor_3, 'friendly_name'), (state_attr(garbage_sensor_3, garbage_sensor_date_attib))), (state_attr(garbage_sensor_4, 'friendly_name'), (state_attr(garbage_sensor_4, garbage_sensor_date_attib)))] | selectattr('1', 'eq', (now() + timedelta(days = day_offset | int)).strftime(garbage_sensor_date_format)) | join(', ',  attribute=0) }}"
+  sensors_tomorrow: '{{ [(state_attr(garbage_sensor_1, ''friendly_name''), (state_attr(garbage_sensor_1,
+    garbage_sensor_date_attib))), (state_attr(garbage_sensor_2, ''friendly_name''),
+    (state_attr(garbage_sensor_2, garbage_sensor_date_attib))), (state_attr(garbage_sensor_3,
+    ''friendly_name''), (state_attr(garbage_sensor_3, garbage_sensor_date_attib))),
+    (state_attr(garbage_sensor_4, ''friendly_name''), (state_attr(garbage_sensor_4,
+    garbage_sensor_date_attib)))] | selectattr(''1'', ''eq'', (now() + timedelta(days
+    = day_offset | int)).strftime(garbage_sensor_date_format)) | join('', '',  attribute=0)
+    }}'
 trigger:
   platform: time
   at: !input reminder_time
 condition:
   condition: template
-  value_template: "{{ sensors_tomorrow != '' }}"
+  value_template: '{{ sensors_tomorrow != '''' }}'
 action:
   service: !input notifier
   data:
-    title: "{{ reminder_title }}"
-    message: "{{ reminder_message }}{{ sensors_tomorrow }}"
+    title: '{{ reminder_title }}'
+    message: '{{ reminder_message }}{{ sensors_tomorrow }}'
