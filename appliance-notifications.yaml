@@ -1,5 +1,5 @@
 blueprint:
-  name: Appliance Runtime Tracker
+  name: Appliance Notifications
   description: Tracks appliance runtime, energy consumption, and cycles. Sends notifications for start, end, and service reminders.
   domain: automation
 
