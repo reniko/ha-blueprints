@@ -8,6 +8,7 @@ blueprint:
     power_tracking:
       name: Power Tracking
       description: Settings related to power tracking
+      collapsed: false
       input:
         power_sensor:
           name: Power Sensor
@@ -20,6 +21,7 @@ blueprint:
     appliance_helpers:
       name: Appliance helper
       description: Appliance Helper
+      collapsed: false
       input:
         appliance_helper:
           name: Text helper
@@ -32,6 +34,7 @@ blueprint:
     thresholds:
       name: Thresholds and Durations
       description: Configurations for start and stop detection
+      collapsed: false
       input:
         power_threshold_start:
           name: Power Threshold (Start)
@@ -76,6 +79,7 @@ blueprint:
     notifications:
       name: Notifications
       description: Settings for notifications
+      collapsed: false
       input:
         notification_target:
           name: Notification Target
@@ -109,7 +113,7 @@ blueprint:
         notification_text_start:
           name: Start Notification Text
           description: Text for start notification
-          default: "The appliance has started."
+          default: "The appliance has started"
           selector:
             text:
         notify_end:
@@ -127,7 +131,7 @@ blueprint:
         notification_text_end:
           name: End Notification Text
           description: Text for end notification (will include additional info)
-          default: "The appliance has finished running."
+          default: "The appliance has finished running"
           selector:
             text:
 
@@ -135,6 +139,7 @@ blueprint:
     duration_tracking:
       name: Duration Tracking
       description: Track appliance run duration
+      collapsed: false
       input:
         track_duration:
           name: Track duration
@@ -159,6 +164,7 @@ blueprint:
     energy_tracking:
       name: Energy Tracking
       description: Settings related to energy tracking
+      collapsed: false
       input:
         track_energy:
           name: Track Energy consumption
@@ -189,6 +195,7 @@ blueprint:
     cycle_tracking:
       name: Cycle Tracking
       description: Track appliance usage cycles
+      collapsed: false
       input:
         track_cycles:
           name: Track Cycles
@@ -213,9 +220,10 @@ blueprint:
     service_reminder:
       name: Service Reminder
       description: Reminders for service maintenance
+      collapsed: false
       input:
         track_service_reminder:
-          name: Track Service Reminder
+          name: Track Service Reminder (track cycles need to be enabled, otherwise this will fail)
           description: Enable service reminder after X cycles
           default: true
           selector:
@@ -249,7 +257,7 @@ blueprint:
         service_notification_text:
           name: Service Notification Text
           description: Text for service reminder notification
-          default: "It's time to clean the filter."
+          default: "It's time to clean the filter"
           selector:
             text:
         service_notification_reset_action_title:
@@ -321,7 +329,7 @@ trigger:
     id: "reset_counter"
 condition:
   - condition: template
-    value_template: "{{ states(power_sensor) not in ['unknown', 'unavailable'] }}"
+    value_template: "{{ has_value(power_sensor) }}"
 
 mode: restart
 
@@ -332,10 +340,11 @@ action:
       entity_id: "{{ appliance_helper }}"
     data:
       value: >-
-        {% set helper_json = states(appliance_helper) %}
-        {% if helper_json in ['unknown', 'unavailable', None] or helper_json|length == 0 %}
-          {% set helper_json = '{}' %}
+        {% set helper_json = '{}' %}
+        {% if has_value(appliance_helper) %}
+            {% set helper_json = states(appliance_helper) %}
         {% endif %}
+        
         {% set dict_var = helper_json | from_json %}
         {% set dict_new = dict(dict_var, **{
           'start_time':dict_var.start_time if 'start_time' in dict_var else (now() | as_datetime).isoformat(),
