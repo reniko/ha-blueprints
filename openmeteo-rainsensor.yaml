@@ -151,6 +151,8 @@ action:
               {% endif %}
               {% if period.end is none or as_datetime(period.end).strftime("%H:%M") is none %}
                 {% set periods.text = periods.text + " ab " + as_datetime(period.start).strftime("%H:%M") %}
+              {% elif as_datetime(period.start) < now %}
+                {% set periods.text = periods.text + " bis " + as_datetime(period.end).strftime("%H:%M") %}
               {% else %}
                 {% set periods.text = periods.text + " von " + as_datetime(period.start).strftime("%H:%M") + " bis " + as_datetime(period.end).strftime("%H:%M") %}
               {% endif %}
