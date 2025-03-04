@@ -1,4 +1,7 @@
 Strategy for climate control:
+
+
+
 	Cond 0: inside <= heating (10) 
 		-> heating needed
   
