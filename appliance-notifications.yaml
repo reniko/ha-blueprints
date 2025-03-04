@@ -329,7 +329,31 @@ trigger:
     id: "reset_counter"
 condition:
   - condition: template
+    value_template: "{{ trigger.from_state.state not in ['unknown', 'unavailable'] }}"
+  - condition: template
+    value_template: "{{ trigger.to_state.state not in ['unknown', 'unavailable'] }}"
+  - condition: template
     value_template: "{{ has_value(power_sensor) }}"
+  - condition: or
+    conditions:
+      # Allow if the trigger is NOT "start"
+      - condition: template
+        value_template: "{{ trigger.id is defined and trigger.id not in ['start'] }}"    
+      # OR allow if "end_time" is None (for "start" triggers)
+      - condition: template
+        value_template: >
+          {% if has_value(appliance_helper) and states(appliance_helper) | regex_match('^\{.*\}$') %}
+            {% set dict_var = states(appliance_helper) | from_json %}
+            {% if 'start_time' in dict_var and dict_var.start_time is none %}
+              {{ true }}
+            {% elif 'end_time' in dict_var %}
+              {{ not dict_var.end_time is none }}
+            {% else %}
+              {{ true }}  
+            {% endif %} 
+          {% else %}
+              {{ true }}   
+          {% endif %} 
 
 mode: restart
 
@@ -341,10 +365,10 @@ action:
     data:
       value: >-
         {% set helper_json = '{}' %}
-        {% if has_value(appliance_helper) %}
+        {% if has_value(appliance_helper) and states(appliance_helper) | regex_match('^\{.*\}$') %}
             {% set helper_json = states(appliance_helper) %}
         {% endif %}
-        
+
         {% set dict_var = helper_json | from_json %}
         {% set dict_new = dict(dict_var, **{
           'start_time':dict_var.start_time if 'start_time' in dict_var else (now() | as_datetime).isoformat(),
@@ -364,7 +388,25 @@ action:
           - condition: trigger
             id: start
         sequence:
-          # track start energy
+          # track start time, reset end_time
+          - service: input_text.set_value
+            target:
+              entity_id: "{{ appliance_helper }}"
+            data:
+              value: >-
+                {% set dict_var = states(appliance_helper) | from_json %}
+                {% set dict_new = dict(dict_var, **{
+                  'start_time':(now() | as_datetime).isoformat(),
+                  'end_time':none,
+                  'start_energy':states(energy_sensor) | float(0),
+                  'end_energy':dict_var.end_energy,
+                  'energy_consumed':dict_var.energy_consumed,       
+                  'cycles':dict_var.cycles,
+                  'last_service':dict_var.last_service
+                  })
+                %}
+                {{ dict_new | to_json }}
+          # track start energy, reset end_energy
           - if:
               - condition: template
                 value_template: "{{ track_energy == true }}"
@@ -378,9 +420,9 @@ action:
                     {% set dict_new = dict(dict_var, **{
                       'start_time':dict_var.start_time,
                       'end_time':dict_var.end_time,
-                      'start_energy':states(energy_sensor) | float(0),
-                      'end_energy':dict_var.end_energy,
-                      'energy_consumed':dict_var.energy_consumed,       
+                      'start_energy':dict_var.start_energy,
+                      'end_energy':none,
+                      'energy_consumed':dict_var.energy_consumed,
                       'cycles':dict_var.cycles,
                       'last_service':dict_var.last_service
                       })
@@ -417,7 +459,7 @@ action:
                   'start_time':dict_var.start_time,
                   'end_time':(now() | as_datetime).isoformat(),
                   'start_energy':dict_var.start_energy,
-                  'end_energy':states(energy_sensor) | float(0),
+                  'end_energy':dict_var.start_energy,
                   'energy_consumed':dict_var.energy_consumed, 
                   'cycles':(dict_var.cycles|int) + 1,
                   'last_service':dict_var.last_service                      
@@ -492,7 +534,7 @@ action:
                     {% endif %}
 
                     {% if add_energy_tracking_to_end_notification == true %}
-                      {% set energy_consumed = dict_var.energy_consumed | string %}
+                      {% set energy_consumed = dict_var.energy_consumed | float(0)| round(2) | string %}
                       {% set text = text + '\n' + energy_notification_text + energy_consumed + ' kWh' %}
                     {% endif %}
 
@@ -508,6 +550,24 @@ action:
                     sticky: false
                     channel: "{{ notification_channel }}"
 
+          # reset start_time
+          - service: input_text.set_value
+            target:
+              entity_id: "{{ appliance_helper }}"
+            data:
+              value: >-
+                {% set dict_var = states(appliance_helper) | from_json %}
+                {% set dict_new = dict(dict_var, **{
+                  'start_time':none,
+                  'end_time':dict_var.end_time,
+                  'start_energy':dict_var.start_energy,
+                  'end_energy':dict_var.start_energy,
+                  'energy_consumed':dict_var.energy_consumed, 
+                  'cycles':(dict_var.cycles|int) + 1,
+                  'last_service':dict_var.last_service                      
+                  })
+                %}
+                {{ dict_new | to_json }}
           # service reminder notification
           - if:
               - condition: template
