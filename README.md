@@ -18,7 +18,7 @@ Strategy for climate control:
 			-> cool
 
 	Cond 2: inside > heating (10)
-			inside < cooling (30)
+		inside < cooling (30)
 			
 		Sub 0: inside < preemtive heating (18)
 			SubSub 0: outside > preemtive heat (18)
