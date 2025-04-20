@@ -1,9 +1,9 @@
 blueprint:
   name: Persistent Door Lock Alert
   description: >
-    Sends a permanent Android notification if the door is open or unlocked
-    during a specified time window. Clears the notification automatically once the door is both closed and locked.
-    Includes a custom message, title, and a Lock Door action button.
+    Sends a persistent Android notification if the door is open, unlocked, or both during a defined time window.
+    Messages are fully configurable. Optionally sends a "secure" notification when the door is locked and closed.
+    Includes a "Lock Door" action only when the door is unlocked and closed.
   domain: automation
   input:
     lock_entity:
@@ -40,14 +40,35 @@ blueprint:
         time: {}
     notification_title:
       name: Notification Title
-      description: Title of the notification.
-      default: "Check the Front Door"
+      description: Title shown in all alert notifications.
+      default: "Front Door Alert"
       selector:
         text: {}
-    notification_message:
-      name: Notification Message
-      description: Main message body.
-      default: "The door is open or unlocked. Please secure it."
+
+    message_door_open:
+      name: Message – Door Open
+      default: "The door is open. Please close it."
+      selector:
+        text: {}
+    message_door_unlocked:
+      name: Message – Door Unlocked
+      default: "The door is unlocked. Please lock it."
+      selector:
+        text: {}
+    message_door_open_unlocked:
+      name: Message – Door Open and Unlocked
+      default: "The door is open and unlocked. Please secure it."
+      selector:
+        text: {}
+    notify_when_secure:
+      name: Notify When Secure
+      description: Send a notification when door is locked and closed?
+      default: true
+      selector:
+        boolean: {}
+    message_secure:
+      name: Message – All Secure
+      default: "The front door is now locked and closed."
       selector:
         text: {}
 
@@ -79,17 +100,35 @@ condition:
         entity_id: !input door_sensor
         state: "on"
 
+variables:
+  door_open: "{{ is_state(inputs.door_sensor, 'on') }}"
+  door_unlocked: "{{ is_state(inputs.lock_entity, 'unlocked') }}"
+  door_closed: "{{ is_state(inputs.door_sensor, 'off') }}"
+  show_lock_action: "{{ door_unlocked and door_closed }}"
+  alert_message: >
+    {% if door_open and door_unlocked %}
+      {{ inputs.message_door_open_unlocked }}
+    {% elif door_open %}
+      {{ inputs.message_door_open }}
+    {% elif door_unlocked %}
+      {{ inputs.message_door_unlocked }}
+    {% else %}
+      ""
+    {% endif %}
+
 action:
   - service: !input notify_target
     data:
-      message: !input notification_message
       title: !input notification_title
+      message: "{{ alert_message }}"
       data:
         tag: door_security_alert
         persistent: true
+        {% if show_lock_action %}
         actions:
           - action: LOCK_DOOR
             title: "Lock the Door"
+        {% endif %}
   - wait_for_trigger:
       - platform: state
         entity_id: !input lock_entity
@@ -100,12 +139,25 @@ action:
     continue_on_timeout: false
   - wait_template: >
       {{ is_state(inputs.lock_entity, 'locked') and is_state(inputs.door_sensor, 'off') }}
-  - service: !input notify_target
-    data:
-      message: "The front door is now locked and closed."
-      title: "All Secure"
-      data:
-        tag: door_security_alert
-        dismiss: true
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ inputs.notify_when_secure }}"
+        sequence:
+          - service: !input notify_target
+            data:
+              title: "All Secure"
+              message: !input message_secure
+              data:
+                tag: door_security_alert
+                dismiss: true
+      - conditions: []
+        sequence:
+          - service: !input notify_target
+            data:
+              message: ""
+              data:
+                tag: door_security_alert
+                dismiss: true
 
 alias: Persistent Door Lock Alert
