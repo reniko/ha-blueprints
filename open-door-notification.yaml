@@ -1,0 +1,115 @@
+blueprint:
+  name: Persistent Door Lock Alert
+  description: >
+    Sends a permanent Android notification to one or more notify groups if the door is open or unlocked
+    within a specified time window. Clears the notification when the door is locked and closed. Supports
+    custom title, message, and an action button to lock the door.
+  domain: automation
+  input:
+    lock_entity:
+      name: Lock Entity
+      description: The smart lock entity to monitor.
+      default: lock.haustur
+      selector:
+        entity:
+          domain: lock
+    door_sensor:
+      name: Door Sensor
+      description: Binary sensor that shows if the door is open or closed.
+      default: binary_sensor.haustur_door_sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    notify_targets:
+      name: Notification Services
+      description: One or more notify services (e.g., mobile device groups).
+      default: [notify.parent_notification_group]
+      selector:
+        target:
+          entity:
+            domain: notify
+          multiple: true
+    time_start:
+      name: Start Time
+      description: Start of the time window for monitoring.
+      default: "22:00:00"
+      selector:
+        time: {}
+    time_end:
+      name: End Time
+      description: End of the time window (can be next day).
+      default: "06:00:00"
+      selector:
+        time: {}
+    notification_title:
+      name: Notification Title
+      description: Title of the notification.
+      default: "Check the Front Door"
+      selector:
+        text: {}
+    notification_message:
+      name: Notification Message
+      description: Main message body.
+      default: "The door is open or unlocked. Please secure it."
+      selector:
+        text: {}
+
+mode: single
+
+trigger:
+  - platform: state
+    entity_id: !input lock_entity
+  - platform: state
+    entity_id: !input door_sensor
+
+condition:
+  - condition: template
+    value_template: >
+      {% set now_time = now().time() %}
+      {% set start = strptime(inputs.time_start, '%H:%M:%S').time() %}
+      {% set end = strptime(inputs.time_end, '%H:%M:%S').time() %}
+      {% if start < end %}
+        {{ start <= now_time <= end }}
+      {% else %}
+        {{ now_time >= start or now_time <= end }}
+      {% endif %}
+  - condition: or
+    conditions:
+      - condition: state
+        entity_id: !input lock_entity
+        state: "unlocked"
+      - condition: state
+        entity_id: !input door_sensor
+        state: "on"
+
+action:
+  - repeat:
+      sequence:
+        - service: notify.group_notify
+          data:
+            message: !input notification_message
+            title: !input notification_title
+            data:
+              tag: door_security_alert
+              persistent: true
+              actions:
+                - action: LOCK_DOOR
+                  title: "Lock the Door"
+      until:
+        - condition: and
+          conditions:
+            - condition: state
+              entity_id: !input lock_entity
+              state: "locked"
+            - condition: state
+              entity_id: !input door_sensor
+              state: "off"
+  - service: notify.group_notify
+    data:
+      message: "The front door is now locked and closed."
+      title: "All Secure"
+      data:
+        tag: door_security_alert
+        dismiss: true
+
+alias: Persistent Door Lock Alert
