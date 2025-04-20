@@ -84,7 +84,7 @@ blueprint:
       selector:
         text: {}
 
-mode: single
+mode: restart
 
 trigger:
   # door state changes
