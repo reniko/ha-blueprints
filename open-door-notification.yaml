@@ -1,5 +1,5 @@
 blueprint:
-  name: Persistent Door Lock Alert (v1.5)
+  name: Persistent Door Lock Alert (v1.6)
   description: >
     Sends a persistent Android notification if the door is open, unlocked, or both during a
     defined time‑window. All texts & titles – including the final “all secure” title – are
@@ -96,8 +96,8 @@ condition:
   - condition: template
     value_template: >
       {% set now_time = now().time() %}
-      {% set start = strptime(inputs.time_start, '%H:%M:%S').time() %}
-      {% set end   = strptime(inputs.time_end,   '%H:%M:%S').time() %}
+      {% set start = strptime(time_start_var, '%H:%M:%S').time() %}
+      {% set end   = strptime(time_end_var,   '%H:%M:%S').time() %}
       {% if start < end %}
         {{ start <= now_time <= end }}
       {% else %}
@@ -117,6 +117,8 @@ variables:
   # Inputs
   lock_entity: !input lock_entity
   door_sensor: !input door_sensor
+  time_start_var: !input time_start
+  time_end_var:   !input time_end
 
   alert_title:        !input notification_title
   all_secure_title:   !input all_secure_title
@@ -145,11 +147,11 @@ variables:
     {% endif %}
 
 action:
-  # 0️⃣  Do nothing if alert_message is empty (door already secure)
+  # 0️⃣  Skip everything if alert_message is blank
   - condition: template
     value_template: "{{ alert_message != '' }}"
 
-  # 1️⃣  Send the alert – choose whether to include the Lock Door action
+  # 1️⃣  Send the alert – include Lock Door action only when appropriate
   - choose:
       - conditions:
           - condition: template
@@ -185,7 +187,7 @@ action:
   - wait_template: >
       {{ is_state(lock_entity, 'locked') and is_state(door_sensor, 'off') }}
 
-  # 3️⃣  Clear the alert and optionally send the secure confirmation
+  # 3️⃣  Clear the alert; optionally send the secure confirmation
   - choose:
       - conditions:
           - condition: template
@@ -199,9 +201,9 @@ action:
                 tag: door_security_alert
                 dismiss: true
     default:
+      # Just dismiss the tagged notification – no blank message
       - service: !input notify_target
         data:
-          message: ""
           data:
             tag: door_security_alert
             dismiss: true
