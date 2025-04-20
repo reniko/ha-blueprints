@@ -1,9 +1,10 @@
 blueprint:
-  name: Persistent Door Lock Alert
+  name: Persistent Door Lock Alert
   description: >
     Sends a persistent Android notification if the door is open, unlocked, or both during a defined
-    time window. Messages are fully configurable. Optionally sends a “secure” notification when the
-    door is locked and closed. Shows a “Lock Door” action only when the door is unlocked while closed.
+    time window. Messages and titles are fully configurable. Optionally sends a “secure” notification
+    (configurable title + message) when the door is locked and closed. Shows a “Lock Door” action
+    only when the door is unlocked while closed.
   domain: automation
 
   input:
@@ -40,25 +41,25 @@ blueprint:
         time: {}
 
     notification_title:
-      name: Notification Title
+      name: Alert Title
       default: "Front Door Alert"
       selector:
         text: {}
 
     message_door_open:
-      name: Message – Door Open
+      name: Message – Door Open
       default: "The door is open. Please close it."
       selector:
         text: {}
 
     message_door_unlocked:
-      name: Message – Door Unlocked
+      name: Message – Door Unlocked
       default: "The door is unlocked. Please lock it."
       selector:
         text: {}
 
     message_door_open_unlocked:
-      name: Message – Door Open & Unlocked
+      name: Message – Door Open & Unlocked
       default: "The door is open and unlocked. Please secure it."
       selector:
         text: {}
@@ -69,8 +70,14 @@ blueprint:
       selector:
         boolean: {}
 
+    all_secure_title:
+      name: All‑Secure Title
+      default: "All Secure"
+      selector:
+        text: {}
+
     message_secure:
-      name: Message – All Secure
+      name: Message – All Secure
       default: "The front door is now locked and closed."
       selector:
         text: {}
@@ -87,8 +94,8 @@ condition:
   - condition: template
     value_template: >
       {% set now_time = now().time() %}
-      {% set start = strptime(input.time_start, '%H:%M:%S').time() %}
-      {% set end   = strptime(input.time_end,   '%H:%M:%S').time() %}
+      {% set start = strptime(time_start_var, '%H:%M:%S').time() %}
+      {% set end   = strptime(time_end_var,   '%H:%M:%S').time() %}
       {% if start < end %}
         {{ start <= now_time <= end }}
       {% else %}
@@ -104,41 +111,49 @@ condition:
         state: "on"
 
 variables:
+  # inputs
   lock_entity: !input lock_entity
   door_sensor: !input door_sensor
+  time_start_var: !input time_start
+  time_end_var:   !input time_end
 
-  title: !input notification_title
-  message_door_open:            !input message_door_open
-  message_door_unlocked:        !input message_door_unlocked
-  message_door_open_unlocked:   !input message_door_open_unlocked
-  message_secure:               !input message_secure
-  notify_when_secure:           !input notify_when_secure
+  # titles / messages
+  alert_title:        !input notification_title
+  all_secure_title:   !input all_secure_title
+  msg_open:           !input message_door_open
+  msg_unlocked:       !input message_door_unlocked
+  msg_open_unlocked:  !input message_door_open_unlocked
+  msg_secure:         !input message_secure
+  notify_when_secure: !input notify_when_secure
 
-  door_open:      "{{ is_state(door_sensor, 'on') }}"
-  door_unlocked:  "{{ is_state(lock_entity, 'unlocked') }}"
-  door_closed:    "{{ is_state(door_sensor, 'off') }}"
-  show_lock_action: "{{ door_unlocked and door_closed }}"
+  # states
+  door_open:       "{{ is_state(door_sensor, 'on') }}"
+  door_unlocked:   "{{ is_state(lock_entity, 'unlocked') }}"
+  door_closed:     "{{ is_state(door_sensor, 'off') }}"
+  show_lock_btn:   "{{ door_unlocked and door_closed }}"
 
+  # pick the right alert message
   alert_message: >
     {% if door_open and door_unlocked %}
-      {{ message_door_open_unlocked }}
+      {{ msg_open_unlocked }}
     {% elif door_open %}
-      {{ message_door_open }}
+      {{ msg_open }}
     {% elif door_unlocked %}
-      {{ message_door_unlocked }}
+      {{ msg_unlocked }}
     {% else %}
       ""
     {% endif %}
 
 action:
+  # 1️⃣  Send the persistent alert (with or without the action button)
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ show_lock_action }}"
+            value_template: "{{ show_lock_btn }}"
         sequence:
           - service: !input notify_target
             data:
-              title: "{{ title }}"
+              title: "{{ alert_title }}"
               message: "{{ alert_message }}"
               data:
                 tag: door_security_alert
@@ -149,12 +164,13 @@ action:
     default:
       - service: !input notify_target
         data:
-          title: "{{ title }}"
+          title: "{{ alert_title }}"
           message: "{{ alert_message }}"
           data:
             tag: door_security_alert
             persistent: true
 
+  # 2️⃣  Wait until the door is both locked AND closed
   - wait_for_trigger:
       - platform: state
         entity_id: !input lock_entity
@@ -162,10 +178,10 @@ action:
       - platform: state
         entity_id: !input door_sensor
         to: "off"
-
   - wait_template: >
       {{ is_state(lock_entity, 'locked') and is_state(door_sensor, 'off') }}
 
+  # 3️⃣  Clear the alert and optionally send the all‑secure confirmation
   - choose:
       - conditions:
           - condition: template
@@ -173,8 +189,8 @@ action:
         sequence:
           - service: !input notify_target
             data:
-              title: "All Secure"
-              message: "{{ message_secure }}"
+              title: "{{ all_secure_title }}"
+              message: "{{ msg_secure }}"
               data:
                 tag: door_security_alert
                 dismiss: true
