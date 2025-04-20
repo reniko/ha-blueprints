@@ -22,13 +22,11 @@ blueprint:
           domain: binary_sensor
     notify_targets:
       name: Notification Services
-      description: One or more notify services (e.g., mobile device groups).
-      default: [notify.parent_notification_group]
+      description: A list of notify service names (e.g., notify.mobile_app_pixel, notify.family_group).
+      default:
+        - notify.parent_notification_group
       selector:
-        target:
-          entity:
-            domain: notify
-          multiple: true
+        object: {}
     time_start:
       name: Start Time
       description: Start of the time window for monitoring.
@@ -85,16 +83,19 @@ condition:
 action:
   - repeat:
       sequence:
-        - service: notify.group_notify
-          data:
-            message: !input notification_message
-            title: !input notification_title
-            data:
-              tag: door_security_alert
-              persistent: true
-              actions:
-                - action: LOCK_DOOR
-                  title: "Lock the Door"
+        - repeat:
+            for_each: !input notify_targets
+            sequence:
+              - service: "{{ repeat.item }}"
+                data:
+                  message: !input notification_message
+                  title: !input notification_title
+                  data:
+                    tag: door_security_alert
+                    persistent: true
+                    actions:
+                      - action: LOCK_DOOR
+                        title: "Lock the Door"
       until:
         - condition: and
           conditions:
@@ -104,12 +105,15 @@ action:
             - condition: state
               entity_id: !input door_sensor
               state: "off"
-  - service: notify.group_notify
-    data:
-      message: "The front door is now locked and closed."
-      title: "All Secure"
-      data:
-        tag: door_security_alert
-        dismiss: true
+  - repeat:
+      for_each: !input notify_targets
+      sequence:
+        - service: "{{ repeat.item }}"
+          data:
+            message: "The front door is now locked and closed."
+            title: "All Secure"
+            data:
+              tag: door_security_alert
+              dismiss: true
 
 alias: Persistent Door Lock Alert
