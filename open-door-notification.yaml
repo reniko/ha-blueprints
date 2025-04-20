@@ -1,12 +1,12 @@
 blueprint:
-  name: Persistent Door Lock Alert (v2.0)
+  name: Persistent Door Lock Alert (v2.1)
   description: >
-    Sends a persistent Android notification if the door is open, unlocked, or both during a
-    defined time‑window. All texts & titles – including the button text and the final “all
-    secure” title – are configurable. Optionally sends a confirmation when the door is locked
-    and closed. A “Lock Door” action button (with configurable label) is shown only when the
-    door is unlocked while closed. Includes a Home‑Assistant‑start trigger so alerts recover
-    automatically after a reboot, and uses “mode: restart” so new triggers cancel any wait.
+    • Alerts when the door is open, unlocked, or both during a chosen time‑window  
+    • Configurable texts, titles, and lock‑button label  
+    • Button inside the notification actually locks the door (no separate automation needed)  
+    • “All Secure” message (configurable) sent when the door becomes safe, or immediately
+      if the automation starts while everything is already secure  
+    • Reboot‑safe (startup trigger) and “mode: restart” so a fresh trigger cancels any wait
   domain: automation
   source_url: https://raw.githubusercontent.com/reniko/ha-blueprints/main/open-door-notification.yaml
 
@@ -51,19 +51,19 @@ blueprint:
 
     message_door_open:
       name: Message – Door Open
-      default: "The door is open. Please close it."
+      default: "The door is closed but unlocked."
       selector:
         text: {}
 
     message_door_unlocked:
       name: Message – Door Unlocked
-      default: "The door is unlocked. Please lock it."
+      default: "The door is unlocked."
       selector:
         text: {}
 
     message_door_open_unlocked:
       name: Message – Door Open & Unlocked
-      default: "The door is open and unlocked. Please secure it."
+      default: "The door is open and unlocked."
       selector:
         text: {}
 
@@ -87,49 +87,37 @@ blueprint:
 
     message_secure:
       name: Message – All Secure
-      default: "The front door is now locked and closed."
+      default: "The door is now locked and closed."
       selector:
         text: {}
 
 mode: restart
 
 trigger:
+  # door state changes
   - platform: state
     entity_id: !input lock_entity
   - platform: state
     entity_id: !input door_sensor
+
+  # Home‑Assistant restart
   - platform: homeassistant
     event: start
 
-condition:
-  # time‑window check (FIXED)
-  - condition: template
-    value_template: >
-      {% set now_time = now().time() %}
-      {% set start = strptime(time_start_var, '%H:%M:%S').time() %}
-      {% set end   = strptime(time_end_var,   '%H:%M:%S').time() %}
-      {% if start < end %}
-        {{ start <= now_time <= end }}
-      {% else %}
-        {{ now_time >= start or now_time <= end }}
-      {% endif %}
-  # door open OR unlocked
-  - condition: or
-    conditions:
-      - condition: state
-        entity_id: !input lock_entity
-        state: "unlocked"
-      - condition: state
-        entity_id: !input door_sensor
-        state: "on"
+  # Button pressed in the notification
+  - platform: event
+    event_type: mobile_app_notification_action
+    event_data:
+      action: LOCK_DOOR
 
 variables:
   # inputs
   lock_entity: !input lock_entity
   door_sensor: !input door_sensor
-  time_start_var: !input time_start          # added back
-  time_end_var:   !input time_end            # added back
+  time_start_var: !input time_start
+  time_end_var:   !input time_end
 
+  # text inputs
   alert_title:        !input notification_title
   all_secure_title:   !input all_secure_title
   lock_btn_title:     !input lock_action_title
@@ -139,11 +127,13 @@ variables:
   msg_secure:         !input message_secure
   notify_when_secure: !input notify_when_secure
 
-  door_open:      "{{ is_state(door_sensor, 'on') }}"
+  # states (evaluate freshly each time)
+  door_open:      "{{ is_state(door_sensor, 'on') or is_state(door_sensor, 'open') }}"
   door_unlocked:  "{{ is_state(lock_entity, 'unlocked') }}"
-  door_closed:    "{{ is_state(door_sensor, 'off') }}"
+  door_closed:    "{{ is_state(door_sensor, 'off') or is_state(door_sensor, 'closed') }}"
   show_lock_btn:  "{{ door_unlocked and door_closed }}"
 
+  # alert message string
   alert_message: >
     {% if door_open and door_unlocked %}
       {{ msg_open_unlocked }}
@@ -152,13 +142,83 @@ variables:
     {% elif door_unlocked %}
       {{ msg_unlocked }}
     {% else %}
-      ""
+      {{ '' }}
     {% endif %}
 
-action:
+condition:
+  # If the trigger is the button press, skip normal conditions
   - condition: template
-    value_template: "{{ alert_message | trim != '' }}"
+    value_template: "{{ trigger.platform != 'event' }}"
 
+  # Time window
+  - condition: template
+    value_template: >
+      {% set now = now().time() %}
+      {% set start = strptime(time_start_var, '%H:%M:%S').time() %}
+      {% set end   = strptime(time_end_var,   '%H:%M:%S').time() %}
+      {% if start < end %}
+        {{ start <= now <= end }}
+      {% else %}
+        {{ now >= start or now <= end }}
+      {% endif %}
+
+  # door is open OR unlocked
+  - condition: or
+    conditions:
+      - condition: state
+        entity_id: !input lock_entity
+        state: "unlocked"
+      - condition: state
+        entity_id: !input door_sensor
+        state: "on"
+
+action:
+  # 1️⃣  If we arrived via the button‑press event → lock the door, dismiss alert, exit
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.platform == 'event' }}"
+        sequence:
+          - service: lock.lock
+            target:
+              entity_id: !input lock_entity
+          - service: !input notify_target
+            data:
+              data:
+                tag: door_security_alert
+                dismiss: true
+        # stop processing further actions
+    default: []
+
+  # 2️⃣  Manual run or normal trigger path
+  # 2a. If the door is already secure
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ alert_message | trim == '' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ notify_when_secure }}"
+                sequence:
+                  - service: !input notify_target
+                    data:
+                      title: "{{ all_secure_title }}"
+                      message: "{{ msg_secure }}"
+                      data:
+                        tag: door_security_alert
+                        dismiss: true
+                default:
+                  - service: !input notify_target
+                    data:
+                      data:
+                        tag: door_security_alert
+                        dismiss: true
+        # stop actions if secure path taken
+    default: []
+
+  # 2b. Send the alert (door NOT secure)
   - choose:
       - conditions:
           - condition: template
@@ -183,6 +243,7 @@ action:
             tag: door_security_alert
             persistent: true
 
+  # 3️⃣  Wait until the door is locked & closed
   - wait_for_trigger:
       - platform: state
         entity_id: !input lock_entity
@@ -190,9 +251,9 @@ action:
       - platform: state
         entity_id: !input door_sensor
         to: "off"
-  - wait_template: >
-      {{ is_state(lock_entity, 'locked') and is_state(door_sensor, 'off') }}
+  - wait_template: "{{ is_state(lock_entity, 'locked') and is_state(door_sensor, 'off') }}"
 
+  # 4️⃣  Clear alert and optionally send secure confirmation
   - choose:
       - conditions:
           - condition: template
