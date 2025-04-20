@@ -1,13 +1,12 @@
 blueprint:
-  name: Persistent Door Lock Alert (v1.9)
+  name: Persistent Door Lock Alert (v2.0)
   description: >
     Sends a persistent Android notification if the door is open, unlocked, or both during a
     defined time‑window. All texts & titles – including the button text and the final “all
     secure” title – are configurable. Optionally sends a confirmation when the door is locked
     and closed. A “Lock Door” action button (with configurable label) is shown only when the
     door is unlocked while closed. Includes a Home‑Assistant‑start trigger so alerts recover
-    automatically after a reboot, and runs in “mode: restart” so new triggers cancel any
-    lingering wait.
+    automatically after a reboot, and uses “mode: restart” so new triggers cancel any wait.
   domain: automation
   source_url: https://raw.githubusercontent.com/reniko/ha-blueprints/main/open-door-notification.yaml
 
@@ -70,7 +69,6 @@ blueprint:
 
     lock_action_title:
       name: Lock‑Button Text
-      description: Label for the action button that locks the door.
       default: "Lock the Door"
       selector:
         text: {}
@@ -104,16 +102,18 @@ trigger:
     event: start
 
 condition:
+  # time‑window check (FIXED)
   - condition: template
     value_template: >
       {% set now_time = now().time() %}
-      {% set start = strptime(inputs.time_start, '%H:%M:%S').time() %}
-      {% set end   = strptime(inputs.time_end,   '%H:%M:%S').time() %}
+      {% set start = strptime(time_start_var, '%H:%M:%S').time() %}
+      {% set end   = strptime(time_end_var,   '%H:%M:%S').time() %}
       {% if start < end %}
         {{ start <= now_time <= end }}
       {% else %}
         {{ now_time >= start or now_time <= end }}
       {% endif %}
+  # door open OR unlocked
   - condition: or
     conditions:
       - condition: state
@@ -124,8 +124,11 @@ condition:
         state: "on"
 
 variables:
+  # inputs
   lock_entity: !input lock_entity
   door_sensor: !input door_sensor
+  time_start_var: !input time_start          # added back
+  time_end_var:   !input time_end            # added back
 
   alert_title:        !input notification_title
   all_secure_title:   !input all_secure_title
