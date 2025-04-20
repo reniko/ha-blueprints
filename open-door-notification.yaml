@@ -1,9 +1,9 @@
 blueprint:
   name: Persistent Door Lock Alert
   description: >
-    Sends a permanent Android notification to one or more notify groups if the door is open or unlocked
-    within a specified time window. Clears the notification when the door is locked and closed. Supports
-    custom title, message, and an action button to lock the door.
+    Sends a permanent Android notification to one or more notify services if the door is open or unlocked
+    during a specified time window. Clears the notification automatically once the door is both closed and locked.
+    Includes a custom message, title, and a Lock Door action button.
   domain: automation
   input:
     lock_entity:
@@ -22,11 +22,12 @@ blueprint:
           domain: binary_sensor
     notify_targets:
       name: Notification Services
-      description: A list of notify service names (e.g., notify.mobile_app_pixel, notify.family_group).
-      default:
-        - notify.parent_notification_group
+      description: List of notify service names (one per line, e.g. notify.mobile_app_pixel_6).
+      default: |
+        notify.parent_notification_group
       selector:
-        object: {}
+        text:
+          multiline: true
     time_start:
       name: Start Time
       description: Start of the time window for monitoring.
@@ -81,10 +82,14 @@ condition:
         state: "on"
 
 action:
+  - variables:
+      notify_services: >
+        {% set lines = iif('\n' in inputs.notify_targets, inputs.notify_targets.split('\n'), [inputs.notify_targets]) %}
+        {{ lines | map('trim') | reject('equalto', '') | list }}
   - repeat:
       sequence:
         - repeat:
-            for_each: !input notify_targets
+            for_each: "{{ notify_services }}"
             sequence:
               - service: "{{ repeat.item }}"
                 data:
@@ -106,7 +111,7 @@ action:
               entity_id: !input door_sensor
               state: "off"
   - repeat:
-      for_each: !input notify_targets
+      for_each: "{{ notify_services }}"
       sequence:
         - service: "{{ repeat.item }}"
           data:
