@@ -115,20 +115,23 @@ variables:
     {% else %}
       ""
     {% endif %}
+  notification_data: >
+    {% set base = {
+      "tag": "door_security_alert",
+      "persistent": True
+    } %}
+    {% if door_unlocked and door_closed %}
+      {{ dict(base, actions=[{"action": "LOCK_DOOR", "title": "Lock the Door"}]) }}
+    {% else %}
+      {{ base }}
+    {% endif %}
 
 action:
   - service: !input notify_target
     data:
       title: !input notification_title
       message: "{{ alert_message }}"
-      data:
-        tag: door_security_alert
-        persistent: true
-        {% if show_lock_action %}
-        actions:
-          - action: LOCK_DOOR
-            title: "Lock the Door"
-        {% endif %}
+      data: "{{ notification_data }}"
   - wait_for_trigger:
       - platform: state
         entity_id: !input lock_entity
