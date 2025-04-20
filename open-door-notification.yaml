@@ -1,7 +1,7 @@
 blueprint:
   name: Persistent Door Lock Alert
   description: >
-    Sends a permanent Android notification to one or more notify services if the door is open or unlocked
+    Sends a permanent Android notification if the door is open or unlocked
     during a specified time window. Clears the notification automatically once the door is both closed and locked.
     Includes a custom message, title, and a Lock Door action button.
   domain: automation
@@ -20,14 +20,12 @@ blueprint:
       selector:
         entity:
           domain: binary_sensor
-    notify_targets:
-      name: Notification Services
-      description: List of notify service names (one per line, e.g. notify.mobile_app_pixel_6).
-      default: |
-        notify.parent_notification_group
+    notify_target:
+      name: Notification Service
+      description: A notify service name (e.g., notify.mobile_app_pixel or a notify group).
+      default: notify.parent_notification_group
       selector:
-        text:
-          multiline: true
+        text: {}
     time_start:
       name: Start Time
       description: Start of the time window for monitoring.
@@ -82,43 +80,32 @@ condition:
         state: "on"
 
 action:
-  - variables:
-      notify_services: >
-        {% set lines = iif('\n' in inputs.notify_targets, inputs.notify_targets.split('\n'), [inputs.notify_targets]) %}
-        {{ lines | map('trim') | reject('equalto', '') | list }}
-  - repeat:
-      sequence:
-        - repeat:
-            for_each: "{{ notify_services }}"
-            sequence:
-              - service: "{{ repeat.item }}"
-                data:
-                  message: !input notification_message
-                  title: !input notification_title
-                  data:
-                    tag: door_security_alert
-                    persistent: true
-                    actions:
-                      - action: LOCK_DOOR
-                        title: "Lock the Door"
-      until:
-        - condition: and
-          conditions:
-            - condition: state
-              entity_id: !input lock_entity
-              state: "locked"
-            - condition: state
-              entity_id: !input door_sensor
-              state: "off"
-  - repeat:
-      for_each: "{{ notify_services }}"
-      sequence:
-        - service: "{{ repeat.item }}"
-          data:
-            message: "The front door is now locked and closed."
-            title: "All Secure"
-            data:
-              tag: door_security_alert
-              dismiss: true
+  - service: !input notify_target
+    data:
+      message: !input notification_message
+      title: !input notification_title
+      data:
+        tag: door_security_alert
+        persistent: true
+        actions:
+          - action: LOCK_DOOR
+            title: "Lock the Door"
+  - wait_for_trigger:
+      - platform: state
+        entity_id: !input lock_entity
+        to: "locked"
+      - platform: state
+        entity_id: !input door_sensor
+        to: "off"
+    continue_on_timeout: false
+  - wait_template: >
+      {{ is_state(inputs.lock_entity, 'locked') and is_state(inputs.door_sensor, 'off') }}
+  - service: !input notify_target
+    data:
+      message: "The front door is now locked and closed."
+      title: "All Secure"
+      data:
+        tag: door_security_alert
+        dismiss: true
 
 alias: Persistent Door Lock Alert
