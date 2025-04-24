@@ -1,5 +1,5 @@
 blueprint:
-  name: Persistent Door Lock Alert (v2.3)
+  name: Persistent Door Lock Alert (v2.3.1)
   description: >
     • Alerts when door is open, unlocked, or both, starting at the configured
       start‑time; clears (and optionally confirms) at end‑time or when door is safe  
@@ -182,7 +182,11 @@ action:
           - service: lock.lock
             target: { entity_id: !input lock_entity }
           - service: !input notify_target
-            data: { data: { tag: door_security_alert, dismiss: true } }
+            data:
+              message: ""
+              data:
+                tag: door_security_alert
+                dismiss: true
           - stop: "Button press handled"
     default: []
 
@@ -195,7 +199,11 @@ action:
             value_template: "{{ trigger.id == 'window_end' }}"
         sequence:
           - service: !input notify_target
-            data: { data: { tag: door_security_alert, dismiss: true } }
+            data:
+              message: ""
+              data:
+                tag: door_security_alert
+                dismiss: true
           - stop: "End‑time cleanup"
     default: []
 
@@ -221,7 +229,11 @@ action:
                         dismiss: true
             default:
               - service: !input notify_target
-                data: { data: { tag: door_security_alert, dismiss: true } }
+                data:
+                  message: ""
+                  data: 
+                    tag: door_security_alert
+                    dismiss: true
           - stop: "Door already secure"
     default: []
 
@@ -281,6 +293,10 @@ action:
                 dismiss: true
     default:
       - service: !input notify_target
-        data: { data: { tag: door_security_alert, dismiss: true } }
+        data:
+          message: ""
+          data:
+            tag: door_security_alert
+            dismiss: true
 
 alias: Persistent Door Lock Alert
