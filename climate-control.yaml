@@ -199,7 +199,7 @@ condition:
 
 action:
   - choose:
-      # Condition 0: Inside temperature is below the preemptive heating threshold -> Heating or ventilation
+      # Condition 0: Inside temperature is below the heating threshold -> Heating or ventilation
       - conditions:
           - condition: template
             value_template: "{{ (states(inside_temperature_sensor)|float(18)) <= heating_threshold }}"
