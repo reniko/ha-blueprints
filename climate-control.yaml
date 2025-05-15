@@ -53,7 +53,7 @@ blueprint:
         entity:
           domain: sensor
           device_class: energy
-    minimum_pv_surplus_for_preemtive_cooling:
+    minimum_pv_surplus_for_preemptive_cooling:
       name: Minimum PV Surplus for Climate Control (W) Cooling
       description: >
         Minimum PV energy surplus needed for climate control to use excess energy for cooling.
@@ -63,7 +63,7 @@ blueprint:
           min: 100
           max: 5000
           unit_of_measurement: W
-    minimum_pv_surplus_for_preemtive_heating:
+    minimum_pv_surplus_for_preemptive_heating:
       name: Minimum PV Surplus for Climate Control (W) Heating
       description: >
         Minimum PV energy surplus needed for climate control to use excess energy for heating.
@@ -82,7 +82,7 @@ blueprint:
           min: 0
           max: 40
           unit_of_measurement: °C
-    preemtive_heating_threshold:
+    preemptive_heating_threshold:
       name: Preemtive heating threshold (°C)
       description: The temperature above which preemtive heating won't be triggered.
       default: 18
@@ -109,7 +109,7 @@ blueprint:
           min: 0
           max: 40
           unit_of_measurement: °C
-    preemtive_cooling_threshold:
+    preemptive_cooling_threshold:
       name: Preemtive cooling threshold (°C)
       description: The temperature below which preemtive cooling won't be triggered.
       default: 28
@@ -139,11 +139,11 @@ blueprint:
           unit_of_measurement: min
 
 #heating_threshold 10
-#preemtive_heating_threshold 18
+#preemptive_heating_threshold 18
 #heating_temperature 20
 
 #cooling_temperature 26
-#preemtive_cooling_threshold 28
+#preemptive_cooling_threshold 28
 #cooling_threshold 30
 
 variables:
@@ -152,13 +152,13 @@ variables:
   weather_forecast_max_sensor: !input weather_forecast_max_sensor
   pv_surplus_sensor: !input pv_surplus_sensor
   pv_remaining_surplus_sensor: !input pv_remaining_surplus_sensor
-  minimum_pv_surplus_for_preemtive_cooling: !input minimum_pv_surplus_for_preemtive_cooling
-  minimum_pv_surplus_for_preemtive_heating: !input minimum_pv_surplus_for_preemtive_heating
+  minimum_pv_surplus_for_preemptive_cooling: !input minimum_pv_surplus_for_preemptive_cooling
+  minimum_pv_surplus_for_preemptive_heating: !input minimum_pv_surplus_for_preemptive_heating
   cooling_threshold: !input cooling_threshold
-  preemtive_cooling_threshold: !input preemtive_cooling_threshold
+  preemptive_cooling_threshold: !input preemptive_cooling_threshold
   cooling_temperature: !input cooling_temperature
   heating_temperature: !input heating_temperature
-  preemtive_heating_threshold: !input preemtive_heating_threshold
+  preemptive_heating_threshold: !input preemptive_heating_threshold
   heating_threshold: !input heating_threshold
   datetime_helper: !input datetime_helper
   change_frequency: !input change_frequency
@@ -186,7 +186,7 @@ action:
               # Sub-condition 0: Prioritize ventilation if outside temperature is high enough
               - conditions:
                   - condition: template
-                    value_template: "{{ (states(outside_temperature_sensor)|float(18)) >= preemtive_heating_threshold }}"
+                    value_template: "{{ (states(outside_temperature_sensor)|float(18)) >= preemptive_heating_threshold }}"
                 sequence:
                   - action: climate.set_temperature
                     target:
@@ -222,7 +222,7 @@ action:
               # Sub-condition 0: Prioritize ventilation if outside temperature is low enough
               - conditions:
                   - condition: template
-                    value_template: "{{ (states(outside_temperature_sensor)|float(18)) <= preemtive_cooling_threshold }}"
+                    value_template: "{{ (states(outside_temperature_sensor)|float(18)) <= preemptive_cooling_threshold }}"
                 sequence:
                   - action: climate.set_temperature
                     target:
@@ -260,15 +260,15 @@ action:
               # Sub-condition 0: Inside temperature lower than preemtive heating treshold: preemtive heating could be usefull
               - conditions:
                   - condition: template
-                    value_template: "{{ (states(inside_temperature_sensor)|float(18)) < preemtive_heating_threshold }}"
+                    value_template: "{{ (states(inside_temperature_sensor)|float(18)) < preemptive_heating_threshold }}"
                 sequence:
                   - choose:
                       # Sub-sub-condition 0: Preemtive heating with fan if outside temperature is higher than preemtive heating threshold
                       - conditions:
                           - condition: template
-                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) > preemtive_heating_threshold }}"                  
+                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) > preemptive_heating_threshold }}"                  
                           - condition: template
-                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) > inside_temperature_sensor }}"
+                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) > (states(inside_temperature_sensor)|float(18)) }}"
                         sequence:
                           - action: climate.set_temperature
                             target:
@@ -284,9 +284,9 @@ action:
                       # Sub-sub-condition 1: Heating if enough PV surplus available
                       - conditions:
                           - condition: template
-                            value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_heating }}"
+                            value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemptive_heating }}"
                           - condition: template
-                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemtive_heating*change_frequency)/60 }}"
+                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemptive_heating*change_frequency)/60 }}"
                         sequence:
                           - action: climate.set_temperature
                             target:
@@ -302,7 +302,7 @@ action:
                       # Sub-sub-condition 2: Preemtive heating with fan but without surplus and high outside temperature (better than nothing)
                       - conditions:
                           - condition: template
-                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) > inside_temperature_sensor }}"
+                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) > (states(inside_temperature_sensor)|float(18)) }}"
                         sequence:
                           - action: climate.set_temperature
                             target:
@@ -332,15 +332,15 @@ action:
               # Sub-condition 1: Inside temperature higher than preemtive cooling treshold: preemtive cooling could be usefull
               - conditions:
                   - condition: template
-                    value_template: "{{ (states(inside_temperature_sensor)|float(18)) > preemtive_cooling_threshold }}"
+                    value_template: "{{ (states(inside_temperature_sensor)|float(18)) > preemptive_cooling_threshold }}"
                 sequence:
                   - choose:
                       # Sub-sub-condition 0: Preemtive cooling with fan if outside temperature is lower than preemtive cooling threshold
                       - conditions:
                           - condition: template
-                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) < preemtive_cooling_threshold }}"                  
+                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) < preemptive_cooling_threshold }}"                  
                           - condition: template
-                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) < inside_temperature_sensor }}"
+                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) < (states(inside_temperature_sensor)|float(18)) }}"
                         sequence:
                           - action: climate.set_temperature
                             target:
@@ -356,9 +356,9 @@ action:
                       # Sub-sub-condition 1: Cooling if enough PV surplus available
                       - conditions:
                           - condition: template
-                            value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_cooling }}"
+                            value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemptive_cooling }}"
                           - condition: template
-                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemtive_cooling*change_frequency)/60 }}"
+                            value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemptive_cooling*change_frequency)/60 }}"
                         sequence:
                           - action: climate.set_temperature
                             target:
@@ -374,7 +374,7 @@ action:
                       # Sub-sub-condition 2: Preemtive cooling with fan but without surplus and low outside temperature (better than nothing)
                       - conditions:
                           - condition: template
-                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) < inside_temperature_sensor }}"
+                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) < (states(inside_temperature_sensor)|float(18)) }}"
                         sequence:
                           - action: climate.set_temperature
                             target:
@@ -404,23 +404,23 @@ action:
               # Sub-condition 2: Inside temperature between preemtive cooling and preemtive heating treshold: preemtive cooling or heating could be usefull
               - conditions:
                   - condition: template
-                    value_template: "{{ (states(inside_temperature_sensor)|float(18)) >= preemtive_heating_threshold }}"
+                    value_template: "{{ (states(inside_temperature_sensor)|float(18)) >= preemptive_heating_threshold }}"
                   - condition: template
-                    value_template: "{{ (states(inside_temperature_sensor)|float(18)) <= preemtive_cooling_threshold }}"
+                    value_template: "{{ (states(inside_temperature_sensor)|float(18)) <= preemptive_cooling_threshold }}"
                 sequence:
                   - choose:
                       # SubSub-condition 0: Temperature forecast above preemtive cooling threshold: preemtive cooling could be usefull
                       - conditions:
                           - condition: template
-                            value_template: "{{ (states(weather_forecast_max_sensor)|float(18)) >= preemtive_cooling_threshold }}"
+                            value_template: "{{ (states(weather_forecast_max_sensor)|float(18)) >= preemptive_cooling_threshold }}"
                         sequence:
                           - choose:
                               # SubSubSub-condition 0: Cooling if enough PV surplus available
                               - conditions:
                                   - condition: template
-                                    value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_cooling }}"
+                                    value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemptive_cooling }}"
                                   - condition: template
-                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemtive_cooling*change_frequency)/60 }}"
+                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemptive_cooling*change_frequency)/60 }}"
                                 sequence:
                                   - action: climate.set_temperature
                                     target:
@@ -450,15 +450,15 @@ action:
                       # SubSub-condition 1: Temperature forecast below preemtive heating threshold: preemtive heating could be usefull
                       - conditions:
                           - condition: template
-                            value_template: "{{ (states(weather_forecast_max_sensor)|float(18)) <= preemtive_heating_threshold }}"
+                            value_template: "{{ (states(weather_forecast_max_sensor)|float(18)) <= preemptive_heating_threshold }}"
                         sequence:
                           - choose:
                               # SubSubSub-condition 0: Cooling if enough PV surplus available
                               - conditions:
                                   - condition: template
-                                    value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemtive_heating }}"
+                                    value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemptive_heating }}"
                                   - condition: template
-                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemtive_heating*change_frequency)/60 }}"
+                                    value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemptive_heating*change_frequency)/60 }}"
                                 sequence:
                                   - action: climate.set_temperature
                                     target:
