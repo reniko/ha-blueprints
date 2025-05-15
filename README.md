@@ -64,6 +64,7 @@ Strategy for climate control:
 	|	|	|	|
 	|	|	|	Cond 2 - Sub 2 - Sub 0 - Sub 0: surplus >= minimum surplus cooling (500)
 	|	|	|	|			 	surplus remaining > (minimum surplus cooling (500) * change frequency (15)) / 60
+ 	|	|	|	|				inside > preemptive_cooling_stop_threshold (20)
 	|	|	|	|	-> cool
 	|	|	|	|
 	|	|	|	Cond 2 - Sub 2 - Sub 0 - Default:
@@ -74,6 +75,7 @@ Strategy for climate control:
 	|	|	|	|
 	|	|	|	Cond 2 - Sub 2 - Sub 1 - Sub 0: surplus >= minimum surplus heating (500)
 	|	|	|	|			 	surplus remaining > (minimum surplus heating (500) * change frequency (15)) / 60
+ 	|	|	|	|				inside < preemptive_heating_stop_threshold (26)
 	|	|	|	|	-> heat
 	|	|	|	|
 	|	|	|	Cond 2 - Sub 2 - Sub - Default:
