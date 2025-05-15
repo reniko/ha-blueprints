@@ -84,13 +84,22 @@ blueprint:
           unit_of_measurement: °C
     preemptive_heating_threshold:
       name: Preemtive heating threshold (°C)
-      description: The temperature above which preemtive heating won't be triggered.
+      description: The temperature below which preemtive heating could be triggered.
       default: 18
       selector:
         number:
           min: 0
           max: 40
           unit_of_measurement: °C
+    preemptive_heating_stop_threshold:
+      name: Stop threshold for preemtive heating  (°C)
+      description: The temperature above which preemtive heating won't be triggered.
+      default: 26
+      selector:
+        number:
+          min: 0
+          max: 40
+          unit_of_measurement: °C          
     heating_temperature:
       name: temperature for heating (°C)
       description: Used as temperature for heating.
@@ -111,13 +120,22 @@ blueprint:
           unit_of_measurement: °C
     preemptive_cooling_threshold:
       name: Preemtive cooling threshold (°C)
-      description: The temperature below which preemtive cooling won't be triggered.
+      description: The temperature above which preemtive cooling could be triggered.
       default: 28
       selector:
         number:
           min: 0
           max: 40
-          unit_of_measurement: °C
+          unit_of_measurement: °C    
+    preemptive_cooling_stop_threshold:
+      name: Stop threshold for preemtive cooling (°C)
+      description: The temperature below which preemtive cooling won't be triggered.
+      default: 20
+      selector:
+        number:
+          min: 0
+          max: 40
+          unit_of_measurement: °C             
     cooling_threshold:
       name: Cooling Threshold (°C)
       description: The temperature above which cooling or ventilation will be triggered.
@@ -141,7 +159,9 @@ blueprint:
 #heating_threshold 10
 #preemptive_heating_threshold 18
 #heating_temperature 20
+#preemptive_heating_stop_threshold 26
 
+#preemptive_cooling_stop_threshold 20
 #cooling_temperature 26
 #preemptive_cooling_threshold 28
 #cooling_threshold 30
@@ -156,9 +176,11 @@ variables:
   minimum_pv_surplus_for_preemptive_heating: !input minimum_pv_surplus_for_preemptive_heating
   cooling_threshold: !input cooling_threshold
   preemptive_cooling_threshold: !input preemptive_cooling_threshold
+  preemptive_cooling_stop_threshold: !input preemptive_cooling_stop_threshold
   cooling_temperature: !input cooling_temperature
   heating_temperature: !input heating_temperature
   preemptive_heating_threshold: !input preemptive_heating_threshold
+  preemptive_heating_stop_threshold: !input preemptive_heating_stop_threshold
   heating_threshold: !input heating_threshold
   datetime_helper: !input datetime_helper
   change_frequency: !input change_frequency
@@ -188,12 +210,11 @@ action:
                   - condition: template
                     value_template: "{{ (states(outside_temperature_sensor)|float(18)) >= preemptive_heating_threshold }}"
                 sequence:
-                  - action: climate.set_temperature
+                  - action: climate.set_hvac_mode
                     target:
                       entity_id: !input climate_entity
                     data:
                       hvac_mode: 'fan_only'
-                      temperature: "{{ heating_temperature }}"
                   - action: logbook.log
                     data:
                       name: "Climate Control"
@@ -224,12 +245,11 @@ action:
                   - condition: template
                     value_template: "{{ (states(outside_temperature_sensor)|float(18)) <= preemptive_cooling_threshold }}"
                 sequence:
-                  - action: climate.set_temperature
+                  - action: climate.set_hvac_mode
                     target:
                       entity_id: !input climate_entity
                     data:
                       hvac_mode: 'fan_only'
-                      temperature: "{{ cooling_temperature }}"
                   - action: logbook.log
                     data:
                       name: "Climate Control"
@@ -270,12 +290,11 @@ action:
                           - condition: template
                             value_template: "{{ (states(outside_temperature_sensor)|float(18)) > (states(inside_temperature_sensor)|float(18)) }}"
                         sequence:
-                          - action: climate.set_temperature
+                          - action: climate.set_hvac_mode
                             target:
                               entity_id: !input climate_entity
                             data:
                               hvac_mode: 'fan_only'
-                              temperature: "{{ heating_temperature }}"
                           - action: logbook.log
                             data:
                               name: "Climate Control"
@@ -304,12 +323,11 @@ action:
                           - condition: template
                             value_template: "{{ (states(outside_temperature_sensor)|float(18)) > (states(inside_temperature_sensor)|float(18)) }}"
                         sequence:
-                          - action: climate.set_temperature
+                          - action: climate.set_hvac_mode
                             target:
                               entity_id: !input climate_entity
                             data:
                               hvac_mode: 'fan_only'
-                              temperature: "{{ heating_temperature }}"
                           - action: logbook.log
                             data:
                               name: "Climate Control"
@@ -342,12 +360,11 @@ action:
                           - condition: template
                             value_template: "{{ (states(outside_temperature_sensor)|float(18)) < (states(inside_temperature_sensor)|float(18)) }}"
                         sequence:
-                          - action: climate.set_temperature
+                          - action: climate.set_hvac_mode
                             target:
                               entity_id: !input climate_entity
                             data:
                               hvac_mode: 'fan_only'
-                              temperature: "{{ cooling_temperature }}"
                           - action: logbook.log
                             data:
                               name: "Climate Control"
@@ -376,12 +393,11 @@ action:
                           - condition: template
                             value_template: "{{ (states(outside_temperature_sensor)|float(18)) < (states(inside_temperature_sensor)|float(18)) }}"
                         sequence:
-                          - action: climate.set_temperature
+                          - action: climate.set_hvac_mode
                             target:
                               entity_id: !input climate_entity
                             data:
                               hvac_mode: 'fan_only'
-                              temperature: "{{ cooling_temperature }}"
                           - action: logbook.log
                             data:
                               name: "Climate Control"
@@ -421,6 +437,8 @@ action:
                                     value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemptive_cooling }}"
                                   - condition: template
                                     value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemptive_cooling*change_frequency)/60 }}"
+                                  - condition: template
+                                    value_template: "{{ (states(inside_temperature_sensor)|float(18)) > preemptive_cooling_stop_threshold }}"                                    
                                 sequence:
                                   - action: climate.set_temperature
                                     target:
@@ -453,12 +471,14 @@ action:
                             value_template: "{{ (states(weather_forecast_max_sensor)|float(18)) <= preemptive_heating_threshold }}"
                         sequence:
                           - choose:
-                              # SubSubSub-condition 0: Cooling if enough PV surplus available
+                              # SubSubSub-condition 0: Heating if enough PV surplus available
                               - conditions:
                                   - condition: template
                                     value_template: "{{ (states(pv_surplus_sensor)|float(0)) >= minimum_pv_surplus_for_preemptive_heating }}"
                                   - condition: template
                                     value_template: "{{ states(pv_remaining_surplus_sensor)|float(0) * 1000 > (minimum_pv_surplus_for_preemptive_heating*change_frequency)/60 }}"
+                                  - condition: template
+                                    value_template: "{{ (states(inside_temperature_sensor)|float(18)) < preemptive_heating_stop_threshold }}"
                                 sequence:
                                   - action: climate.set_temperature
                                     target:
