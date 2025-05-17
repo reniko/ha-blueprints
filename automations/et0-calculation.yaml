@@ -1,0 +1,72 @@
+alias: Tägliche Et0-Bilanz & Laufzeit
+description: ""
+triggers:
+  - at: "23:55:00"
+    trigger: time
+actions:
+  - repeat:
+      for_each:
+        - bucket: input_number.lawn_back_bucket
+          size: input_number.lawn_back_size
+          bucket_name: hinten
+          runtime: input_number.lawn_back_runtime
+        - bucket: input_number.lawn_front_bucket
+          size: input_number.lawn_front_size
+          bucket_name: vorne
+          runtime: input_number.lawn_front_runtime
+      sequence:
+        - variables:
+            new_bucket: >
+              {% set old = states(repeat.item.bucket) | float(maxb) %}  {% set
+              val = [ old - (et0 * factor) + rain, 0, maxb ] | sort %} {{
+              val[1]}}
+            diff: >
+              {% set old = states(repeat.item.bucket) | float(maxb) %}  {% set
+              val = new_bucket - old %} {{ val }}
+        - target:
+            entity_id: "{{ repeat.item.bucket }}"
+          data:
+            value: "{{ new_bucket }}"
+          action: input_number.set_value
+          enabled: true
+        - choose:
+            - conditions:
+                - condition: template
+                  value_template: "{{ new_bucket < threshold }}"
+              sequence:
+                - variables:
+                    deficit: "{{ maxb - new_bucket }}"
+                    flow: "{{ states('input_number.lawn_throughput') | float(45) }}"
+                    area: "{{ states(repeat.item.size) | float(160) }}"
+                    minutes: "{{ (deficit / (flow / area)) | round(0) }}"
+                - target:
+                    entity_id: "{{ repeat.item.runtime }}"
+                  data:
+                    value: "{{ minutes }}"
+                  action: input_number.set_value
+                  enabled: true
+                - action: notify.admin_notification_group
+                  data:
+                    title: Bucket {{repeat.item.bucket_name}}
+                    message: >-
+                      Bucket: {{new_bucket|round(1)}} mm ({{diff|round(1)}} mm)
+                      Runtime: {{minutes|round(1)}} min
+                    data:
+                      tag: bucket_{{repeat.item.bucket_name}}
+                      sticky: false
+                      channel: watering
+          default:
+            - action: notify.admin_notification_group
+              data:
+                title: Bucket {{repeat.item.bucket_name}}
+                message: "Bucket: {{new_bucket|round(1)}} mm ({{diff|round(1)}} mm)"
+                data:
+                  tag: bucket_{{repeat.item.bucket_name}}
+                  sticky: false
+                  channel: watering
+variables:
+  et0: "{{ states('sensor.open_meteo_et0_mm')                     | float(0) }}"
+  factor: "{{ states('input_number.lawn_et0_factor')                 | float(1) }}"
+  rain: "{{ states('sensor.rain_today_mm')                         | float(0) }}"
+  maxb: "{{ states('input_number.lawn_bucket_max')                 | float(40) }}"
+  threshold: "{{ states('input_number.lawn_bucket_preemtive_threshold') | float(15) }}"
