@@ -1,0 +1,109 @@
+alias: Rasen bewässern (PV & Regen)
+description: ""
+triggers:
+  - entity_id: sensor.evcc_energy_available_for_climate
+    above: input_number.lawn_pump_power
+    trigger: numeric_state
+  - entity_id: sensor.solis_battery_soc
+    above: input_number.lawn_watering_min_soc
+    trigger: numeric_state
+  - trigger: time
+    at: input_datetime.lawn_watering_late
+conditions:
+  - condition: or
+    conditions:
+      - condition: numeric_state
+        entity_id: input_number.lawn_front_runtime
+        above: 0
+      - condition: numeric_state
+        entity_id: input_number.lawn_back_runtime
+        above: 0
+  - condition: or
+    conditions:
+      - condition: and
+        conditions:
+          - condition: state
+            entity_id: binary_sensor.lawn_preemtive_watering
+            state: "on"
+          - condition: time
+            after: input_datetime.lawn_watering_early
+            before: input_datetime.lawn_watering_late
+          - condition: state
+            entity_id: binary_sensor.rain_expected
+            state: "off"
+          - condition: numeric_state
+            entity_id: sensor.solis_battery_soc
+            above: input_number.lawn_watering_min_soc
+          - condition: numeric_state
+            entity_id: sensor.evcc_energy_available_for_climate
+            above: input_number.lawn_pump_power
+      - condition: state
+        entity_id: binary_sensor.lawn_too_long_dry
+        state: "on"
+      - condition: state
+        entity_id: binary_sensor.lawn_preemtive_watering
+        state: "off"
+actions:
+  - repeat:
+      for_each:
+        - name: vorne
+          valve: valve.vorne
+          runtime: input_number.lawn_front_runtime
+          bucket: input_number.lawn_front_bucket
+          notify_tag: watering_vorne
+          notify_title: Bewässern vorne
+        - name: hinten
+          valve: valve.hinten
+          runtime: input_number.lawn_back_runtime
+          bucket: input_number.lawn_back_bucket
+          notify_tag: watering_hinten
+          notify_title: Bewässern hinten
+      sequence:
+        - variables:
+            run_minutes: "{{ states(repeat.item.runtime) | int(0) }}"
+        - condition: template
+          value_template: |
+            {{ run_minutes > 0
+               or is_state('binary_sensor.lawn_too_long_dry', 'on') }}
+        - data:
+            title: "{{ repeat.item.notify_title }}"
+            message: Starte Bewässerung für {{ run_minutes }} min
+            data:
+              tag: "{{ repeat.item.notify_tag }}"
+              sticky: false
+              channel: watering
+          action: notify.admin_notification_group
+        - target:
+            entity_id: "{{ repeat.item.valve }}"
+          action: valve.open_valve
+        - delay:
+            minutes: "{{ run_minutes }}"
+        - target:
+            entity_id: "{{ repeat.item.valve }}"
+          action: valve.close_valve
+        - data:
+            title: "{{ repeat.item.notify_title }}"
+            message: Bewässerung nach {{ run_minutes }} min beendet
+            data:
+              tag: "{{ repeat.item.notify_tag }}"
+              sticky: false
+              channel: watering
+          action: notify.admin_notification_group
+        - target:
+            entity_id: "{{ repeat.item.bucket }}"
+          data:
+            value: "{{ states('input_number.lawn_bucket_max') | float(40) }}"
+          action: input_number.set_value
+        - target:
+            entity_id: "{{ repeat.item.runtime }}"
+          data:
+            value: 0
+          action: input_number.set_value
+        - target:
+            entity_id: input_datetime.lawn_last_irrigation
+          data:
+            datetime: "{{ now() }}"
+          action: input_datetime.set_datetime
+mode: single
+trace:
+  stored_traces: 25
