@@ -8,11 +8,11 @@
 # push notifications to a Home‑Assistant *notification group* only when the
 # recommendation changes.
 # -----------------------------------------------------------------
-# VERSION: 0.3.0  (2025‑05‑19)
+# VERSION: 0.3.1  (2025‑05‑19)
 # -----------------------------------------------------------------
 
 blueprint:
-  name: Ventilation Recommendation (forecast + time window)
+  name: Ventilation Recommendation (forecast + time window, v0.3.1)
   description: >
     Recommend window ventilation for a single room.  
     Criteria: ΔT, dew‑point, comfort range, heating state, (optional)
@@ -21,7 +21,6 @@ blueprint:
     *notification group* only when the recommendation changes.
   domain: automation
   source_url: https://github.com/<your_repo>/ventilation_recommendation.yaml
-  version: "0.3.0"
 
 # ───────────────────────────────────────────────────────────────────
 # INPUTS
@@ -280,5 +279,4 @@ action:
             then:
               - service: "{{ notify_group }}"
                 data:
-                  message: "🪟 Bitte Fenster im Raum {{ room_slug | replace('_',' ') }} schließen – Lüftung nicht mehr vorteilhaft."
-mode: restart
+                  message: "🪟 Bitte Fenster im Raum {{ room_slug | replace('_',' ') }} schließen – Lüftung nicht mehr vorteilhar...
