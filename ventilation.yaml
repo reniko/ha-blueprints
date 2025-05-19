@@ -8,11 +8,11 @@
 # push notifications to a Home‑Assistant *notification group* only when the
 # recommendation changes.
 # -----------------------------------------------------------------
-# VERSION: 0.3.3  (2025‑05‑19)
+# VERSION: 0.3.4  (2025‑05‑19)  – fix target.entity_id templating
 # -----------------------------------------------------------------
 
 blueprint:
-  name: Ventilation Recommendation (forecast + time window, v0.3.3)
+  name: Ventilation Recommendation (forecast + time window, v0.3.4)
   description: >
     Recommend window ventilation for a single room.
     Criteria: ΔT, dew‑point, comfort range, heating state, (optional)
@@ -240,7 +240,11 @@ trigger:
       - !input heating_active
       - !input forecast_low
       - !input forecast_high
-      - !input window_sensors
+    for:
+      minutes: 2
+  # Window sensors trigger their own state
+  - platform: state
+    entity_id: !input window_sensors
     for:
       minutes: 2
   - platform: time_pattern
@@ -255,7 +259,7 @@ action:
       - conditions: "{{ should_ventilate and recommendation_current == 'off' }}"
         sequence:
           - service: input_boolean.turn_on
-            target:
+            data:
               entity_id: "{{ recommendation_boolean }}"
           - if:
               - condition: template
@@ -273,7 +277,7 @@ action:
       - conditions: "{{ (not should_ventilate) and recommendation_current == 'on' }}"
         sequence:
           - service: input_boolean.turn_off
-            target:
+            data:
               entity_id: "{{ recommendation_boolean }}"
           - if:
               - condition: template
