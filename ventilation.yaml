@@ -1,12 +1,14 @@
 # Home Assistant Blueprint – Ventilation Recommendation (per room)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room
-# using indoor/outdoor sensor readings, heating state, comfort threshold, an
+# using indoor/outdoor sensor readings, heating state, comfort threshold,
 # optional weather forecast **and** an optional time window (e.g. no
-# ventilation recommendations at night for ground‑floor rooms).  
-# Sends its result to an input_boolean helper and can (optionally)
-# push notifications to a Home‑Assistant *notification group*.
-# VERSION: 2025‑05‑19b
+# ventilation recommendations at night for ground‑floor rooms).
+# Sends its decision to an input_boolean helper and can (optionally)
+# push notifications to a Home‑Assistant *notification group* only when the
+# recommendation changes.
+# -----------------------------------------------------------------
+# VERSION: 0.3.0  (2025‑05‑19)
 # -----------------------------------------------------------------
 
 blueprint:
@@ -19,6 +21,7 @@ blueprint:
     *notification group* only when the recommendation changes.
   domain: automation
   source_url: https://github.com/<your_repo>/ventilation_recommendation.yaml
+  version: "0.3.0"
 
 # ───────────────────────────────────────────────────────────────────
 # INPUTS
@@ -161,7 +164,7 @@ input:
 variables:
   # Inputs
   room_slug: !input room_slug
-  # Sensors
+  # Sensors & helpers
   temp_in: !input temp_in
   temp_out: !input temp_out
   dew_in: !input dew_in
@@ -173,17 +176,53 @@ variables:
   forecast_low: !input forecast_low
   forecast_high: !input forecast_high
   window_sensors: !input window_sensors
-  # Helpers
   heating_active: !input heating_active
   recommendation_boolean: !input recommendation_boolean
   notify_group: !input notify_group
-  # Thresholds
+  # Thresholds / time
   comfort_max: !input comfort_max
   min_temp_diff: !input min_temp_diff
-  # Time window
   allow_night: !input allow_night
   time_start: !input time_start
   time_end: !input time_end
+
+  # Current sensor readings (helper "float" to avoid errors on "unknown")
+  t_in: "{{ states(temp_in) | float(99) }}"
+  t_out: "{{ states(temp_out) | float(99) }}"
+  d_in: "{{ states(dew_in) | float(99) }}"
+  d_out: "{{ states(dew_out) | float(99) }}"
+  e_in: "{{ states(enthalpy_in) | float(0) }}"
+  e_out: "{{ states(enthalpy_out) | float(0) }}"
+  p_in: "{{ states(press_in) | float(0) }}"
+  p_out: "{{ states(press_out) | float(0) }}"
+  f_low: "{{ states(forecast_low) | float(99) }}"
+  f_high: "{{ states(forecast_high) | float(-99) }}"
+
+  # Basic condition checks
+  temp_ok: "{{ t_out < (t_in - min_temp_diff) }}"
+  dew_ok: "{{ d_out < d_in }}"
+  enthalpy_ok: "{{ e_out < e_in if enthalpy_out else true }}"
+  comfort_ok: "{{ t_in > comfort_max }}"
+  heating_off: "{{ states(heating_active) in ['off','false','0','standby','idle','cool','dry'] }}"
+  forecast_low_ok: "{{ f_low < (t_in - min_temp_diff) if forecast_low else true }}"
+  forecast_high_ok: "{{ f_high > t_in if forecast_high else true }}"
+  pressure_ok: "{{ (p_in - p_out)|abs > 2 if (press_in and press_out) else true }}"
+  # Time window
+  time_allowed: >
+    {% if allow_night %}true{% else %}
+      {% set now_str = now().strftime('%H:%M:%S') %}
+      {{ time_start <= now_str <= time_end }}
+    {% endif %}
+  # Combined decision
+  should_ventilate: >
+    {{ temp_ok and dew_ok and enthalpy_ok and comfort_ok and heating_off
+       and forecast_low_ok and forecast_high_ok and pressure_ok and time_allowed }}
+
+  any_window_open: >
+    {% set open = false %}
+    {% for w in window_sensors %}{% if is_state(w,'on') %}{% set open = true %}{% endif %}{% endfor %}
+    {{ open }}
+  recommendation_current: "{{ states(recommendation_boolean) }}"
 
 # ───────────────────────────────────────────────────────────────────
 # TRIGGERS – sensor changes & 15‑min heartbeat
@@ -210,56 +249,9 @@ trigger:
 # ACTIONS
 # ───────────────────────────────────────────────────────────────────
 action:
-  - variables:
-      # Helper to cast states to float safely
-      float_or: >
-        {% macro f(entity, default) %}{{ states(entity)|float(default) }}{% endmacro %}
-        {{- f -}}
-      # Current sensor readings
-      t_in: "{{ float_or(temp_in, 99) }}"
-      t_out: "{{ float_or(temp_out, 99) }}"
-      d_in: "{{ float_or(dew_in, 99) }}"
-      d_out: "{{ float_or(dew_out, 99) }}"
-      e_in: "{{ float_or(enthalpy_in, 0) }}"
-      e_out: "{{ float_or(enthalpy_out, 0) }}"
-      # Derived booleans
-      temp_ok: "{{ t_out < (t_in - min_temp_diff) }}"
-      dew_ok: "{{ d_out < d_in }}"
-      enthalpy_ok: >
-        {% if enthalpy_out %}{{ e_out < e_in }}{% else %}true{% endif %}
-      comfort_ok: "{{ t_in > comfort_max }}"
-      heating_off: "{{ states(heating_active) in ['off','false','0','standby','idle','cool','dry'] }}"
-      forecast_low_ok: >
-        {% if forecast_low %}{{ float_or(forecast_low,99) < (t_in - min_temp_diff) }}{% else %}true{% endif %}
-      forecast_high_ok: >
-        {% if forecast_high %}{{ float_or(forecast_high,-99) > t_in }}{% else %}true{% endif %}
-      pressure_ok: >
-        {% if press_in and press_out %}
-          {{ (float_or(press_in,0)-float_or(press_out,0)) | abs > 2 }}
-        {% else %}true{% endif %}
-      # Time window check
-      time_allowed: >
-        {% if allow_night %}true{% else %}
-          {% set now_str = now().strftime('%H:%M:%S') %}
-          {{ time_start <= now_str <= time_end }}
-        {% endif %}
-      # Combine all
-      should_ventilate: >
-        {{ temp_ok and dew_ok and enthalpy_ok and comfort_ok and heating_off
-           and forecast_low_ok and forecast_high_ok and pressure_ok and time_allowed }}
-      # Current recommendation state
-      recommendation_current: "{{ states(recommendation_boolean) }}"
-      # Window state helpers
-      any_window_open: >
-        {% set open = false %}
-        {% for w in window_sensors %}
-          {% if is_state(w,'on') %}{% set open = true %}{% endif %}
-        {% endfor %}
-        {{ open }}
   - choose:
       # ─── Turn recommendation ON ───
-      - conditions: >
-          {{ should_ventilate and recommendation_current == 'off' }}
+      - conditions: "{{ should_ventilate and recommendation_current == 'off' }}"
         sequence:
           - service: input_boolean.turn_on
             target:
@@ -277,8 +269,7 @@ action:
                       💨 Lüften empfohlen im Raum {{ room_slug | replace('_',' ') }} – bitte Fenster öffnen.
                     {% endif %}
       # ─── Turn recommendation OFF ───
-      - conditions: >
-          {{ (not should_ventilate) and recommendation_current == 'on' }}
+      - conditions: "{{ (not should_ventilate) and recommendation_current == 'on' }}"
         sequence:
           - service: input_boolean.turn_off
             target:
