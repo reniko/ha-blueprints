@@ -8,13 +8,13 @@
 # push notifications to a Home‑Assistant *notification group* only when the
 # recommendation changes.
 # -----------------------------------------------------------------
-# VERSION: 0.3.2  (2025‑05‑19)
+# VERSION: 0.3.3  (2025‑05‑19)
 # -----------------------------------------------------------------
 
 blueprint:
-  name: Ventilation Recommendation (forecast + time window, v0.3.2)
+  name: Ventilation Recommendation (forecast + time window, v0.3.3)
   description: >
-    Recommend window ventilation for a single room.  
+    Recommend window ventilation for a single room.
     Criteria: ΔT, dew‑point, comfort range, heating state, (optional)
     enthalpy, forecast, time window and window sensors. The automation
     writes its decision to an *input_boolean* and notifies a HA
@@ -22,140 +22,142 @@ blueprint:
   domain: automation
   source_url: https://github.com/<your_repo>/ventilation_recommendation.yaml
 
-# ───────────────────────────────────────────────────────────────────
-# INPUTS
-# ───────────────────────────────────────────────────────────────────
-input:
-  room_slug:
-    name: Room Slug (no spaces)
-    selector:
-      text:
-  # ─ Sensors ─
-  temp_in:
-    name: Indoor Temperature Sensor
-    selector:
-      entity:
-        domain: sensor
-  temp_out:
-    name: Outdoor Temperature Sensor
-    selector:
-      entity:
-        domain: sensor
-  dew_in:
-    name: Indoor Dew‑Point Sensor
-    selector:
-      entity:
-        domain: sensor
-  dew_out:
-    name: Outdoor Dew‑Point Sensor
-    selector:
-      entity:
-        domain: sensor
-  enthalpy_in:
-    name: Indoor Enthalpy Sensor (optional)
-    default: ""
-    selector:
-      entity:
-        domain: sensor
-        multiple: false
-  enthalpy_out:
-    name: Outdoor Enthalpy Sensor (optional)
-    default: ""
-    selector:
-      entity:
-        domain: sensor
-        multiple: false
-  press_in:
-    name: Indoor Pressure Sensor (optional)
-    default: ""
-    selector:
-      entity:
-        domain: sensor
-        multiple: false
-  press_out:
-    name: Outdoor Pressure Sensor (optional)
-    default: ""
-    selector:
-      entity:
-        domain: sensor
-        multiple: false
-  forecast_low:
-    name: Forecast Night‑Minimum Temperature (optional)
-    default: ""
-    selector:
-      entity:
-        domain: sensor
-  forecast_high:
-    name: Forecast Day‑Maximum Temperature (optional)
-    default: ""
-    selector:
-      entity:
-        domain: sensor
-  # ─ Window sensors (optional) ─
-  window_sensors:
-    name: Window Sensors (optional, multiple)
-    description: Will be used for open/close reminders.
-    default: []
-    selector:
-      entity:
-        domain: binary_sensor
-        device_class: window
-        multiple: true
+  # ─────────────────────────────────────────────────────────────────
+  # INPUTS
+  # ─────────────────────────────────────────────────────────────────
+  input:
+    room_slug:
+      name: Room Slug (no spaces)
+      selector:
+        text:
 
-  # ─ Helpers / outputs ─
-  heating_active:
-    name: Heating‑State Helper / Climate entity
-    description: Boolean (`on` = heating) or climate device (`hvac_mode != 'off'`).
-    selector:
-      entity:
-  recommendation_boolean:
-    name: Output Helper (input_boolean)
-    selector:
-      entity:
-        domain: input_boolean
-  notify_group:
-    name: Notification Group (notify.<group>) – optional
-    default: ""
-    selector:
-      text:
+    # ─ Sensors ─
+    temp_in:
+      name: Indoor Temperature Sensor
+      selector:
+        entity:
+          domain: sensor
+    temp_out:
+      name: Outdoor Temperature Sensor
+      selector:
+        entity:
+          domain: sensor
+    dew_in:
+      name: Indoor Dew‑Point Sensor
+      selector:
+        entity:
+          domain: sensor
+    dew_out:
+      name: Outdoor Dew‑Point Sensor
+      selector:
+        entity:
+          domain: sensor
+    enthalpy_in:
+      name: Indoor Enthalpy Sensor (optional)
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+          multiple: false
+    enthalpy_out:
+      name: Outdoor Enthalpy Sensor (optional)
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+          multiple: false
+    press_in:
+      name: Indoor Pressure Sensor (optional)
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+          multiple: false
+    press_out:
+      name: Outdoor Pressure Sensor (optional)
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+          multiple: false
+    forecast_low:
+      name: Forecast Night‑Minimum Temperature (optional)
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    forecast_high:
+      name: Forecast Day‑Maximum Temperature (optional)
+      default: ""
+      selector:
+        entity:
+          domain: sensor
 
-  # ─ Thresholds ─
-  comfort_max:
-    name: Comfort Upper Temperature (°C)
-    default: 25
-    selector:
-      number:
-        min: 10
-        max: 35
-        step: 0.5
-  min_temp_diff:
-    name: Minimum Temperature Difference (°C)
-    default: 2
-    selector:
-      number:
-        min: 0
-        max: 10
-        step: 0.5
+    # ─ Window sensors (optional) ─
+    window_sensors:
+      name: Window Sensors (optional, multiple)
+      description: Will be used for open/close reminders.
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: window
+          multiple: true
 
-  # ─ Time window ─
-  allow_night:
-    name: Allow Night Ventilation
-    description: >
-      If *false*, recommendations will only be sent between the time range
-      below (useful for ground‑floor rooms).
-    default: true
-    selector:
-      boolean:
-  time_start:
-    name: Earliest Recommendation Time
-    default: "06:00:00"
-    selector:
-      time:
-  time_end:
-    name: Latest Recommendation Time
-    default: "22:00:00"
-    selector:
-      time:
+    # ─ Helpers / outputs ─
+    heating_active:
+      name: Heating‑State Helper / Climate entity
+      description: Boolean (`on` = heating) or climate device (`hvac_mode != 'off'`).
+      selector:
+        entity:
+    recommendation_boolean:
+      name: Output Helper (input_boolean)
+      selector:
+        entity:
+          domain: input_boolean
+    notify_group:
+      name: Notification Group (notify.<group>) – optional
+      default: ""
+      selector:
+        text:
+
+    # ─ Thresholds ─
+    comfort_max:
+      name: Comfort Upper Temperature (°C)
+      default: 25
+      selector:
+        number:
+          min: 10
+          max: 35
+          step: 0.5
+    min_temp_diff:
+      name: Minimum Temperature Difference (°C)
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 0.5
+
+    # ─ Time window ─
+    allow_night:
+      name: Allow Night Ventilation
+      description: >
+        If *false*, recommendations will only be sent between the time range
+        below (useful for ground‑floor rooms).
+      default: true
+      selector:
+        boolean:
+    time_start:
+      name: Earliest Recommendation Time
+      default: "06:00:00"
+      selector:
+        time:
+    time_end:
+      name: Latest Recommendation Time
+      default: "22:00:00"
+      selector:
+        time:
 
 # ───────────────────────────────────────────────────────────────────
 # VARIABLES
