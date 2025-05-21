@@ -1,4 +1,4 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.6.1)
+# Ventilation Recommendation (forecast + hysteresis, v0.6.2)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
@@ -10,17 +10,16 @@
 # - Writes result to an input_boolean and (optionally) sends a push notification.
 # - Debug output goes to Logbook via logbook.log, attached to the same boolean entity.
 #
-# 2025‑05‑21 – v0.6.1  (fix YAML colons, complete turn_off branch, helper variables)
+# 2025‑05‑21 – v0.6.2  (complete YAML, close action branches & debug block)
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.6.1)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.6.2)
   description: >
     Recommends when to open / close windows for passive cooling of a room.
     It compares indoor vs. outdoor temperature, dew point (and optional enthalpy),
     checks user‑defined thresholds from input_number helpers, optionally evaluates
     a weather forecast and respects a time window so ground‑floor rooms stay closed overnight.
   domain: automation
-
   source_url: https://github.com/reniko/ha-blueprints/blob/main/ventilation.yaml
 
 input:
@@ -200,11 +199,11 @@ variables:
   rec_state: "{{ states(rec_bool_entity) }}"  # 'on' / 'off'
 
   # time window check
-  allow_night: !input allow_night
+  allow_night_flag: !input allow_night
   start_time: !input time_start
   end_time: !input time_end
   timeframe_ok: >
-    {% if allow_night %}
+    {% if allow_night_flag %}
       true
     {% else %}
       {% set now_time = now().strftime('%H:%M:%S') %}
@@ -275,4 +274,25 @@ action:
         sequence:
           - service: homeassistant.turn_off
             target:
-              entity_id: "
+              entity_id: "{{ rec_bool_entity }}"
+          - choose:
+              - conditions: "{{ notify_target != '' }}"
+                sequence:
+                  - service: "{{ notify_target }}"
+                    data:
+                      message: >
+                        🪟 *{{ room }}*: Fenster schließen (ΔT {{ delta_t | round(1) }} K).
+
+  - choose:
+      - conditions: "{{ debug_on }}"
+        sequence:
+          - service: logbook.log
+            data:
+              name: "Ventilation Debug"
+              entity_id: "{{ rec_bool_entity }}"
+              message: >
+                Lüften={{ 'JA' if should_ventilate else 'NEIN' }} | ΔT={{ delta_t | round(1) }}K
+                ΔT_OK={{ temp_ok }} τ_OK={{ dew_ok }} enth_OK={{ enth_ok }} fc_OK={{ forecast_ok }}
+                Heizung={{ 'AN' if heating_on else 'AUS' }} Zeit_OK={{ timeframe_ok }}
+
+mode: single
