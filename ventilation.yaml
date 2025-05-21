@@ -1,18 +1,18 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.6.3)
+# Ventilation Recommendation (forecast + hysteresis, v0.6.4)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
 # - Optional: Enthalpy comparison
 # - Optional: Weather‑forecast check using «forecast_low» (next 6 h) and «forecast_high» (next 12 h)
 # - Optional: Time window (disable night ventilation)
-# - All thresholds are now read from input_number helpers so you can retune them on the fly.
+# - All thresholds come from input_number helpers so you can retune them on the fly.
 # - Outputs recommendation to an input_boolean and can push notifications.
 # - Debug information is written to Logbook via logbook.log attached to the same boolean.
 #
-# 2025‑05‑21 – v0.6.3 (input inside blueprint block, static trigger list, YAML valid)
+# 2025‑05‑21 – v0.6.4 (fixed timeframe_ok: avoid !input inside Jinja)
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.6.3)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.6.4)
   description: >
     Recommends when to open or close windows for passive cooling of a room.
     It compares indoor vs. outdoor temperature, dew point (and optional enthalpy),
@@ -134,9 +134,14 @@ blueprint:
 
 variables:
   room: !input room_slug
+  # Helper‑Entitäten
   min_delta_entity: !input min_delta_helper
   hysteresis_entity: !input hysteresis_helper
   comfort_entity: !input comfort_helper
+  # Zeitfenster‑Strings als Variablen (kein !input in Jinja)
+  time_start_val: !input time_start
+  time_end_val: !input time_end
+
   # Helper‑Werte (mit Fallback)
   min_delta: "{{ states(min_delta_entity)|float(default=2) }}"
   reopen_delta: "{{ states(hysteresis_entity)|float(default=1) }}"
@@ -174,14 +179,14 @@ variables:
   heating_on: "{{ is_state(heating_entity, 'on') }}"
   rec_state: "{{ states(rec_entity) }}"
 
-  # Zeitfenster
+  # Zeitfenster-Bedingung
   allow_night_flag: !input allow_night
   timeframe_ok: >
     {% if allow_night_flag %}
       true
     {% else %}
       {% set n = now().strftime('%H:%M:%S') %}
-      {{ (!input time_start) <= n <= (!input time_end) }}
+      {{ time_start_val <= n <= time_end_val }}
     {% endif %}
 
   # Bedingungen
