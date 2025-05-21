@@ -1,191 +1,259 @@
-# Home Assistant Blueprint – Ventilation Recommendation (per room, v0.4.5)
-# -------------------------------------------------------------------------
-# VERSION: 0.4.5  (2025‑05‑21)
-# Changelog
-#   • Quote all !input references inside Jinja templates → "'!input xyz'"
-#   • Removes TemplateSyntaxError: unexpected char '!'
-#   • Pressure inputs removed (v0.4.2)
-# -------------------------------------------------------------------------
+# Ventilation Recommendation (forecast + time window, v0.3.5)
+# -----------------------------------------------------------------
+# Calculates whether window ventilation is recommended for a single room.
+# - Core checks: ΔT, ΔTaupunkt
+# - Optional: Enthalpy, Forecast (high/low), Time‑window
+# - Avoids night ventilation if allow_night = false
+# - Writes to an input_boolean and (optionally) pushes a notification
+# -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + time window, v0.4.5)
-  description: |
-    Calculates whether window ventilation is advisable for a single room, based on
-    indoor/outdoor temperature, dew‑point and (optionally) enthalpy, daily or hourly
-    forecast, heating state and a configurable time window. Writes the result to an
-    input_boolean helper and (optionally) sends a push notification via a notify group.
+  name: Ventilation Recommendation (forecast + time window, v0.3.5)
+  description: >
+    Recommends manual window ventilation for a single room based on
+    indoor/outdoor sensors, heating state, configurable comfort limits,
+    optional weather forecast and an optional time window.
   domain: automation
   source_url: https://github.com/reniko/ha-blueprints/blob/main/ventilation.yaml
 
   input:
     room_slug:
-      name: Room slug (lowercase, no spaces)
+      name: Room name (slug)
+      description: Short name without spaces (e.g. "Wohnzimmer"). Used in messages.
+      selector:
+        text:
+    # --- Core sensors -------------------------------------------------------
     temp_in:
       name: Indoor temperature sensor
-      selector: { entity: { domain: sensor } }
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
     temp_out:
       name: Outdoor temperature sensor
-      selector: { entity: { domain: sensor } }
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
     dew_in:
-      name: Indoor dew‑point
-      selector: { entity: { domain: sensor } }
+      name: Indoor dew‑point sensor
+      selector:
+        entity:
+          domain: sensor
     dew_out:
-      name: Outdoor dew‑point
-      selector: { entity: { domain: sensor } }
+      name: Outdoor dew‑point sensor
+      selector:
+        entity:
+          domain: sensor
+    # --- Optional sensors ----------------------------------------------------
     enthalpy_in:
-      name: (Optional) Indoor enthalpy
-      selector: { entity: { domain: sensor } }
+      name: Indoor enthalpy sensor (optional)
       default: ""
+      selector:
+        entity:
+          domain: sensor
+          multiple: false
     enthalpy_out:
-      name: (Optional) Outdoor enthalpy
-      selector: { entity: { domain: sensor } }
+      name: Outdoor enthalpy sensor (optional)
       default: ""
+      selector:
+        entity:
+          domain: sensor
+          multiple: false
     forecast_high:
-      name: (Optional) Forecast high temperature
-      selector: { entity: { domain: sensor } }
+      name: Forecast day‑high temperature sensor (optional)
       default: ""
+      selector:
+        entity:
+          domain: sensor
     forecast_low:
-      name: (Optional) Forecast night low temperature
-      selector: { entity: { domain: sensor } }
+      name: Forecast night‑low temperature sensor (optional)
       default: ""
-    window_sensors:
-      name: (Optional) Window contact sensors
-      selector: { entity: { domain: binary_sensor, device_class: window, multiple: true } }
-      default: []
-    heating_active:
-      name: Helper/entity that is 'on' when heating is active
-      selector: { entity: {} }
-    recommendation_boolean:
-      name: Input boolean helper to store recommendation
-      selector: { entity: { domain: input_boolean } }
-    notify_group:
-      name: (Optional) Notify group for push messages
-      selector: { entity: { domain: notify } }
-      default: ""
-    allow_night:
-      name: Allow night ventilation (true/false)
-      selector: { boolean: {} }
-      default: true
-    time_start:
-      name: Start time for daytime window
-      selector: { time: {} }
-      default: "06:00:00"
-    time_end:
-      name: End time for daytime window
-      selector: { time: {} }
-      default: "22:00:00"
+      selector:
+        entity:
+          domain: sensor
+    # --- Comfort & thresholds ----------------------------------------------
     min_temp_diff:
       name: Minimum temperature difference (°C)
-      selector: { number: { min: 0, max: 5, step: 0.5, unit_of_measurement: "°C" } }
-      default: 1
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 0.5
+          unit_of_measurement: °C
     comfort_max:
-      name: Comfort maximum temperature (°C)
-      selector: { number: { min: 18, max: 30, step: 0.5, unit_of_measurement: "°C" } }
+      name: Maximum comfortable indoor temperature (°C)
       default: 25
+      selector:
+        number:
+          min: 18
+          max: 30
+          step: 0.5
+          unit_of_measurement: °C
+    # --- Time window / night block -----------------------------------------
+    allow_night:
+      name: Allow night ventilation
+      description: If off, recommendations only between the two times below.
+      default: true
+      selector:
+        boolean:
+    time_start:
+      name: Earliest ventilation time
+      default: "06:00:00"
+      selector:
+        time:
+    time_end:
+      name: Latest ventilation time
+      default: "22:00:00"
+      selector:
+        time:
+    # --- Window sensors & heating ------------------------------------------
+    window_sensors:
+      name: Window contact sensors (optional)
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: window
+          multiple: true
+    heating_active:
+      name: Helper or climate entity indicating heating active (on/off)
+      selector:
+        entity:
+    recommendation_boolean:
+      name: Target input_boolean that stores the recommendation
+      selector:
+        entity:
+          domain: input_boolean
+    notify_group:
+      name: Notify target (mobile app / group) (optional)
+      default: ""
+      selector:
+        text:
+    # --- Debug --------------------------------------------------------------
     debug_log:
-      name: Write detailed debug to system_log
-      selector: { boolean: {} }
+      name: Write debug info to system_log
       default: false
+      selector:
+        boolean:
 
-mode: single
+# ---------------------------------------------------------------------------
+automation:
+  mode: single
+  variables:
+    room: !input room_slug
+    # ---- numeric thresholds ------------------------------------------------
+    min_tempdiff: "{{ !input min_temp_diff | float }}"
+    comfort_max: "{{ !input comfort_max | float }}"
+    # ---- sensor values -----------------------------------------------------
+    temp_in: "{{ states('!input temp_in') | float }}"
+    temp_out: "{{ states('!input temp_out') | float }}"
+    dew_in: "{{ states('!input dew_in') | float }}"
+    dew_out: "{{ states('!input dew_out') | float }}"
+    enth_in: >
+      {% if '!input enthalpy_in' != '' %}
+        {{ states('!input enthalpy_in') | float }}
+      {% else %} 0 {% endif %}
+    enth_out: >
+      {% if '!input enthalpy_out' != '' %}
+        {{ states('!input enthalpy_out') | float }}
+      {% else %} 0 {% endif %}
+    f_high: >
+      {% if '!input forecast_high' != '' %}
+        {{ states('!input forecast_high') | float }}
+      {% else %} -99 {% endif %}
+    f_low: >
+      {% if '!input forecast_low' != '' %}
+        {{ states('!input forecast_low') | float }}
+      {% else %} 99 {% endif %}
+    heating_on: "{{ is_state('!input heating_active', 'on') }}"
+    now_time: "{{ now().strftime('%H:%M:%S') }}"
+    timeframe_ok: >
+      {% if !input allow_night %}
+        {{ '!input time_start' <= now().strftime('%H:%M:%S') < '!input time_end' }}
+      {% else %}
+        true
+      {% endif %}
+    # ---- logical checks ----------------------------------------------------
+    temp_ok: "{{ temp_out < (temp_in - (min_tempdiff | float)) }}"
+    dew_ok: "{{ dew_out < dew_in }}"
+    enth_ok: >
+      {% if '!input enthalpy_in' != '' and '!input enthalpy_out' != '' %}
+        {{ enth_out < enth_in }}
+      {% else %} true {% endif %}
+    forecast_ok: >
+      {% if '!input forecast_high' != '' and '!input forecast_low' != '' %}
+        {{ (f_low < comfort_max) and (f_high > temp_in) }}
+      {% else %} true {% endif %}
+    should_ventilate: "{{ temp_ok and dew_ok and enth_ok and forecast_ok and timeframe_ok and not heating_on }}"
 
-trigger:
-  - platform: state
-    entity_id: !input temp_out
-  - platform: state
-    entity_id: !input temp_in
-  - platform: state
-    entity_id: !input dew_out
-  - platform: state
-    entity_id: !input dew_in
-  - platform: state
-    entity_id: !input enthalpy_out
-  - platform: state
-    entity_id: !input enthalpy_in
-  - platform: state
-    entity_id: !input heating_active
-  - platform: state
-    entity_id: !input forecast_high
-  - platform: state
-    entity_id: !input forecast_low
-  - platform: time_pattern
-    minutes: "/10"
+  # -------------------------------------------------------------------------
+  trigger:
+    # sensor changes
+    - platform: state
+      entity_id: !input temp_out
+    - platform: state
+      entity_id: !input temp_in
+    - platform: state
+      entity_id: !input dew_out
+    - platform: state
+      entity_id: !input dew_in
+    - platform: state
+      entity_id: !input enthalpy_out
+      enabled: "{{ '!input enthalpy_out' != '' }}"
+    - platform: state
+      entity_id: !input enthalpy_in
+      enabled: "{{ '!input enthalpy_in' != '' }}"
+    - platform: state
+      entity_id: !input forecast_high
+      enabled: "{{ '!input forecast_high' != '' }}"
+    - platform: state
+      entity_id: !input forecast_low
+      enabled: "{{ '!input forecast_low' != '' }}"
+    - platform: state
+      entity_id: !input heating_active
+    # periodic sanity
+    - platform: time_pattern
+      minutes: "/10"
 
-variables:
-  room: !input room_slug
-  min_tempdiff: "{{ '!input min_temp_diff' | float }}"
-  comfort_max: "{{ '!input comfort_max' | float }}"
-
-  temp_in: "{{ states('!input temp_in') | float }}"
-  temp_out: "{{ states('!input temp_out') | float }}"
-  dew_in: "{{ states('!input dew_in') | float }}"
-  dew_out: "{{ states('!input dew_out') | float }}"
-
-  enth_in: >
-    {% if '!input enthalpy_in' %}{{ states('!input enthalpy_in') | float }}{% else %}0{% endif %}
-  enth_out: >
-    {% if '!input enthalpy_out' %}{{ states('!input enthalpy_out') | float }}{% else %}0{% endif %}
-
-  f_high: >
-    {% if '!input forecast_high' %}{{ states('!input forecast_high') | float }}{% else %}-99{% endif %}
-  f_low: >
-    {% if '!input forecast_low' %}{{ states('!input forecast_low') | float }}{% else %}99{% endif %}
-
-  heating_on: "{{ is_state('!input heating_active', 'on') }}"
-  now_time: "{{ now().strftime('%H:%M:%S') }}"
-
-  timeframe_ok: >
-    {% if '!input allow_night' %}true{% else %}
-      {{ '!input time_start' <= now().strftime('%H:%M:%S') < '!input time_end' }}
-    {% endif %}
-
-  temp_ok: "{{ temp_out < (temp_in - min_tempdiff) }}"
-  dew_ok:  "{{ dew_out  < dew_in }}"
-  enth_ok: >
-    {% if '!input enthalpy_in' and '!input enthalpy_out' %}
-      {{ enth_out < enth_in }}
-    {% else %}true{% endif %}
-  forecast_ok: >
-    {% if '!input forecast_high' and '!input forecast_low' %}
-      {{ (f_low < comfort_max) and (f_high > temp_in) }}
-    {% else %}true{% endif %}
-
-  should_ventilate: >
-    {{ temp_ok and dew_ok and enth_ok and forecast_ok and timeframe_ok and not heating_on }}
-
-action:
-  - choose:
-      - conditions: "{{ should_ventilate and is_state('!input recommendation_boolean', 'off') }}"
-        sequence:
-          - service: input_boolean.turn_on
-            target: { entity_id: !input recommendation_boolean }
-          - choose:
-              - conditions: "{{ '!input notify_group' != '' }}"
-                sequence:
-                  - service: !input notify_group
-                    data:
-                      message: "💨 Bitte {{ room }} lüften (Fenster öffnen)."
-      - conditions: "{{ (not should_ventilate) and is_state('!input recommendation_boolean', 'on') }}"
-        sequence:
-          - service: input_boolean.turn_off
-            target: { entity_id: !input recommendation_boolean }
-          - choose:
-              - conditions: "{{ '!input notify_group' != '' }}"
-                sequence:
-                  - service: !input notify_group
-                    data:
-                      message: "🪟 Bitte Fenster in {{ room }} schließen."
-  - choose:
-      - conditions: "{{ '!input debug_log' | bool }}"
-        sequence:
-          - service: system_log.write
-            data:
-              level: info
-              message: |
-                Lüften-Debug {{ room }}:
-                  T-OK: {{ temp_ok }} OUT {{ temp_out }} < IN {{ temp_in }} - Δ {{ min_tempdiff }}
-                  D-OK: {{ dew_ok }} OUT {{ dew_out|round(1) }} < IN {{ dew_in|round(1) }}
-                  H-OK: {{ enth_ok }} OUT {{ enth_out|round(1) }} < IN {{ enth_in|round(1) }}
-                  F-OK: {{ forecast_ok }} Low {{ f_low }} < {{ comfort_max }} ; High {{ f_high }} > IN {{ temp_in }}
-                  TF-OK: {{ timeframe_ok }} '!input time_start' < {{ now_time }} < '!input time_end'
-                  HZ-OK: {{ not heating_on }}  Heizung {{ 'AN' if heating_on else 'AUS' }}
-                  ➜ VENTILATE = {{ 'JA' if should_ventilate else 'NEIN' }}
+  # -------------------------------------------------------------------------
+  action:
+    - choose:
+        - conditions: "{{ should_ventilate and is_state('!input recommendation_boolean', 'off') }}"
+          sequence:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: !input recommendation_boolean
+            - choose:
+                - conditions: "{{ '!input notify_group' != '' }}"
+                  sequence:
+                    - service: "notify/{{ !input notify_group }}"
+                      data:
+                        message: "💨 Bitte {{ room }} lüften (Fenster öffnen)."
+        - conditions: "{{ (not should_ventilate) and is_state('!input recommendation_boolean', 'on') }}"
+          sequence:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: !input recommendation_boolean
+            - choose:
+                - conditions: "{{ '!input notify_group' != '' }}"
+                  sequence:
+                    - service: "notify/{{ !input notify_group }}"
+                      data:
+                        message: "🪟 Bitte Fenster in {{ room }} schließen."
+    # Debug log -------------------------------------------------------------
+    - choose:
+        - conditions: "{{ !input debug_log }}"
+          sequence:
+            - service: system_log.write
+              data:
+                level: info
+                message: >
+                  Lüften‑Debug {{ room }}:\n
+                    T‑OK {{ temp_ok }} OUT {{ temp_out }} < IN {{ temp_in }} – Δ {{ min_tempdiff }}\n
+                    D‑OK {{ dew_ok }} OUT {{ dew_out|round(1) }} < IN {{ dew_in|round(1) }}\n
+                    H‑OK {{ enth_ok }} OUT {{ enth_out|round(1) }} < IN {{ enth_in|round(1) }}\n
+                    F‑OK {{ forecast_ok }} Low {{ f_low }} < {{ comfort_max }} ; High {{ f_high }} > IN {{ temp_in }}\n
+                    TF‑OK {{ timeframe_ok }} {{ now_time }} in window\n
+                    HZ {{ 'AN' if heating_on else 'AUS' }}\n
+                    ➜ VENTILATE {{ 'JA' if should_ventilate else 'NEIN' }}
