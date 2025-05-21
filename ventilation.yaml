@@ -1,198 +1,63 @@
-# Home Assistant Blueprint – Ventilation Recommendation (per room)
-# -----------------------------------------------------------------
-# VERSION: 0.4.0  (2025‑05‑21)
-# 
-# Changelog 0.4.0
-#   • Druck‑Check entfernt  – press_in / press_out optional & rein informativ
-#   • Optionaler Debug‑Log: schreibt alle Teilbedingungen in system_log
-#   • Forecast‑Inputs unverändert (daily High/Low) – siehe README unten
-# 
-# -----------------------------------------------------------------
-blueprint:
-  name: Ventilation Recommendation (forecast + time window, v0.4.0)
-  description: |
-    Calculates whether window ventilation is recommended for a single room
-    based on indoor/outdoor temperature, dewpoint, (optional) enthalpy, an
-    optional forecast (daily high/low), heating state and an optional time
-    window.  The result is published to an input_boolean helper (one per
-    room).  If windowSensors are given, push messages can be sent to a
-    notify group.  Optionally writes a detailed debug line to the HA system
-    log at every evaluation run.
-
-  domain: automation
-  source_url: https://github.com/reniko/ha-blueprints/blob/main/ventilation.yaml
-
+use_blueprint:
+  path: reniko/ventilation.yaml
   input:
-    room_slug:
-      name: Room‑Slug
-      description: Short identifier without blanks (used to build entity ids)
-    temp_in:
-      name: Indoor temperature sensor
-    temp_out:
-      name: Outdoor temperature sensor
-    dew_in:
-      name: Indoor dewpoint sensor
-    dew_out:
-      name: Outdoor dewpoint sensor
-    enthalpy_in:
-      name: Indoor enthalpy sensor (optional)
-      default: ""
-    enthalpy_out:
-      name: Outdoor enthalpy sensor (optional)
-      default: ""
-    # pressure sensors now optional – only for info‑log
-    press_in:
-      name: Indoor pressure sensor (optional)
-      default: ""
-    press_out:
-      name: Outdoor pressure sensor (optional)
-      default: ""
-    forecast_high:
-      name: Forecast high today (optional)
-      default: ""
-    forecast_low:
-      name: Forecast low tonight (optional)
-      default: ""
+    room_slug: Wohnzimmer
+    temp_in: sensor.temperatur_schlafzimmer_temperature
+    temp_out: sensor.ecowitt_outdoor_temperature
+    dew_in: sensor.thermal_comfort_schlafzimmer_taupunkt
+    dew_out: sensor.thermal_comfort_aussen_taupunkt
+    enthalpy_in: sensor.thermal_comfort_schlafzimmer_enthalpie_feuchter_luft
+    enthalpy_out: sensor.thermal_comfort_aussen_enthalpie_feuchter_luft
     window_sensors:
-      name: List of window contact sensors (optional)
-      default: []
-    heating_active:
-      name: Boolean helper or climate attribute that is on when heating
-    recommendation_boolean:
-      name: Helper (input_boolean) to store current recommendation state
-    notify_group:
-      name: notify.* group for push (optional)
-      default: ""
-    allow_night:
-      name: Allow night ventilation
-      selector:
-        boolean:
-    time_start:
-      name: Earliest time for ventilation (HH:MM)
-      default: "06:00"
-    time_end:
-      name: Latest time for ventilation (HH:MM)
-      default: "22:00"
-    comfort_max:
-      name: Comfort max temp (°C)
-      default: 25
-    min_temp_diff:
-      name: Minimum ΔT to ventilate (°C)
-      default: 1
-    debug_log:
-      name: Write debug info to system_log
-      selector:
-        boolean:
-      default: false
-
-mode: single
-max_exceeded: silent
-
-trigger:
-  # fire whenever relevant sensors change significantly or every 5 min fallback
-  - platform: state
-    entity_id: !input temp_in
-  - platform: state
-    entity_id: !input temp_out
-  - platform: time_pattern
-    minutes: "/5"
-
-variables:
-  temp_in: "{{ states(!input temp_in)|float }}"
-  temp_out: "{{ states(!input temp_out)|float }}"
-  dew_in: "{{ states(!input dew_in)|float }}"
-  dew_out: "{{ states(!input dew_out)|float }}"
-  enthalpy_in: "{{ states(!input enthalpy_in)|float(999) }}"
-  enthalpy_out: "{{ states(!input enthalpy_out)|float(0) }}"
-  press_in: "{{ states(!input press_in)|float }}"
-  press_out: "{{ states(!input press_out)|float }}"
-  f_high: "{{ states(!input forecast_high)|float(-99) }}"
-  f_low: "{{ states(!input forecast_low)|float(99) }}"
-  heating_on: "{{ is_state(!input heating_active, 'on') }}"
-  allow_night: !input allow_night
-  time_start: !input time_start
-  time_end: !input time_end
-  now_time: "{{ now().strftime('%H:%M') }}"
-  comfort_max: !input comfort_max | int
-  min_tempdiff: !input min_temp_diff | float
-
-  # checks
-  t_ok: "{{ temp_out < temp_in - min_tempdiff }}"
-  d_ok: "{{ dew_out < dew_in }}"
-  h_ok: "{{ enthalpy_out < enthalpy_in }}"
-  forecast_ok: "{{ (f_low < comfort_max) and (f_high > temp_in) if f_low != 99 and f_high != -99 else true }}"
-  timeframe_ok: "{{ allow_night or (time_start <= now_time < time_end) }}"
-  should_vent: "{{ t_ok and d_ok and h_ok and forecast_ok and timeframe_ok and not heating_on }}"
-  recommendation_current: "{{ states(!input recommendation_boolean) }}"
-  debug_log: !input debug_log
-
-action:
-  - choose:
-      - conditions: "{{ should_vent and recommendation_current == 'off' }}"
-        sequence:
-          - service: input_boolean.turn_on
-            target:
-              entity_id: !input recommendation_boolean
-          - if:
-              - "{{ debug_log }}"
-            then:
-              - service: system_log.write
-                data:
-                  level: info
-                  message: |
-                    [Ventilation] {{ !input room_slug }} → ON
-                    T-OK {{ t_ok }} (out {{ temp_out }} < in {{ temp_in }} - Δ {{ min_tempdiff }})
-                    D-OK {{ d_ok }} (out {{ dew_out }} < in {{ dew_in }})
-                    H-OK {{ h_ok }} (out {{ enthalpy_out }} < in {{ enthalpy_in }})
-                    F-OK {{ forecast_ok }} (low {{ f_low }} / high {{ f_high }})
-          - if:
-              - "{{ !input notify_group != '' }}"
-              - condition: or
-                conditions:
-                  - "{{ !input window_sensors | length == 0 }}"
-                  - condition: state
-                    entity_id: !input window_sensors
-                    match: any
-                    state: 'off'
-            then:
-              - service: !input notify_group
-                data:
-                  message: "💨 Lüften im {{ !input room_slug }} empfohlen (Fenster sind geschlossen)."
-      - conditions: "{{ not should_vent and recommendation_current == 'on' }}"
-        sequence:
-          - service: input_boolean.turn_off
-            target:
-              entity_id: !input recommendation_boolean
-          - if:
-              - "{{ debug_log }}"
-            then:
-              - service: system_log.write
-                data:
-                  level: info
-                  message: |
-                    [Ventilation] {{ !input room_slug }} → OFF
-                    T-OK {{ t_ok }} (out {{ temp_out }} < in {{ temp_in }} - Δ {{ min_tempdiff }})
-                    D-OK {{ d_ok }} (out {{ dew_out }} < in {{ dew_in }})
-                    H-OK {{ h_ok }} (out {{ enthalpy_out }} < in {{ enthalpy_in }})
-                    F-OK {{ forecast_ok }} (low {{ f_low }} / high {{ f_high }})
-          - if:
-              - "{{ !input notify_group != '' }}"
-              - condition: state
-                entity_id: !input window_sensors
-                match: any
-                state: 'on'
-            then:
-              - service: !input notify_group
-                data:
-                  message: "🪟 Bitte Fenster im {{ !input room_slug }} schließen."
-
-# -----------------------------------------------------------------------------
-# README
-# -------
-# 1) Pressure sensors are OPTIONAL now. They are logged for information but no
-#    longer influence the recommendation.
-# 2) Forecast sensors should come from daily forecast (temperature / templow).
-#    If you prefer hourly lookahead, adapt your template sensors and keep the
-#    entity ids the same – the logic here remains unchanged.
-# 3) Set debug_log: true when instantiating the blueprint to get a multiline
-#    system_log entry at every evaluation.
+      - binary_sensor.shelly_door_wohnzimmer_1_window
+      - binary_sensor.shelly_door_wohnzimmer_3_window
+    heating_active: input_boolean.heizung_aktiv
+    recommendation_boolean: input_boolean.luften_sinnvoll_wohnzimmer
+    notify_group: notify.admin_notification_group
+    allow_night: false
+    press_in: sensor.temperatur_schlafzimmer_pressure
+    press_out: sensor.ecowitt_absolute_pressure
+    forecast_high: sensor.forecast_high_today
+    forecast_low: sensor.forecast_low_tonight
+use_blueprint:
+  path: reniko/ventilation.yaml
+  input:
+    room_slug: Wohnzimmer
+    temp_in: sensor.temperatur_schlafzimmer_temperature
+    temp_out: sensor.ecowitt_outdoor_temperature
+    dew_in: sensor.thermal_comfort_schlafzimmer_taupunkt
+    dew_out: sensor.thermal_comfort_aussen_taupunkt
+    enthalpy_in: sensor.thermal_comfort_schlafzimmer_enthalpie_feuchter_luft
+    enthalpy_out: sensor.thermal_comfort_aussen_enthalpie_feuchter_luft
+    window_sensors:
+      - binary_sensor.shelly_door_wohnzimmer_1_window
+      - binary_sensor.shelly_door_wohnzimmer_3_window
+    heating_active: input_boolean.heizung_aktiv
+    recommendation_boolean: input_boolean.luften_sinnvoll_wohnzimmer
+    notify_group: notify.admin_notification_group
+    allow_night: false
+    press_in: sensor.temperatur_schlafzimmer_pressure
+    press_out: sensor.ecowitt_absolute_pressure
+    forecast_high: sensor.forecast_high_today
+    forecast_low: sensor.forecast_low_tonight
+use_blueprint:
+  path: reniko/ventilation.yaml
+  input:
+    room_slug: Wohnzimmer
+    temp_in: sensor.temperatur_schlafzimmer_temperature
+    temp_out: sensor.ecowitt_outdoor_temperature
+    dew_in: sensor.thermal_comfort_schlafzimmer_taupunkt
+    dew_out: sensor.thermal_comfort_aussen_taupunkt
+    enthalpy_in: sensor.thermal_comfort_schlafzimmer_enthalpie_feuchter_luft
+    enthalpy_out: sensor.thermal_comfort_aussen_enthalpie_feuchter_luft
+    window_sensors:
+      - binary_sensor.shelly_door_wohnzimmer_1_window
+      - binary_sensor.shelly_door_wohnzimmer_3_window
+    heating_active: input_boolean.heizung_aktiv
+    recommendation_boolean: input_boolean.luften_sinnvoll_wohnzimmer
+    notify_group: notify.admin_notification_group
+    allow_night: false
+    press_in: sensor.temperatur_schlafzimmer_pressure
+    press_out: sensor.ecowitt_absolute_pressure
+    forecast_high: sensor.forecast_high_today
+    forecast_low: sensor.forecast_low_tonight
