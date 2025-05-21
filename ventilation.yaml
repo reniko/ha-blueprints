@@ -1,217 +1,190 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.6.2)
+# Ventilation Recommendation (forecast + hysteresis, v0.6.3)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
 # - Optional: Enthalpy comparison
 # - Optional: Weather‑forecast check using «forecast_low» (next 6 h) and «forecast_high» (next 12 h)
 # - Optional: Time window (disable night ventilation)
-# - All temperature thresholds (ΔT to open, hysteresis to close, comfort set‑point)
-#   are now read from **input_number helpers** so you can retune them from the UI.
-# - Writes result to an input_boolean and (optionally) sends a push notification.
-# - Debug output goes to Logbook via logbook.log, attached to the same boolean entity.
+# - All thresholds are now read from input_number helpers so you can retune them on the fly.
+# - Outputs recommendation to an input_boolean and can push notifications.
+# - Debug information is written to Logbook via logbook.log attached to the same boolean.
 #
-# 2025‑05‑21 – v0.6.2  (complete YAML, close action branches & debug block)
+# 2025‑05‑21 – v0.6.3 (input inside blueprint block, static trigger list, YAML valid)
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.6.2)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.6.3)
   description: >
-    Recommends when to open / close windows for passive cooling of a room.
+    Recommends when to open or close windows for passive cooling of a room.
     It compares indoor vs. outdoor temperature, dew point (and optional enthalpy),
-    checks user‑defined thresholds from input_number helpers, optionally evaluates
-    a weather forecast and respects a time window so ground‑floor rooms stay closed overnight.
+    applies open/close hysteresis read from helpers, can check a short‑term weather forecast
+    and respects a daytime window so ground‑floor rooms stay shut overnight.
   domain: automation
   source_url: https://github.com/reniko/ha-blueprints/blob/main/ventilation.yaml
+  input:
+    room_slug:
+      name: Raum‑Slug (Kurzname ohne Leerzeichen)
+      selector:
+        text:
+          multiline: false
+    temp_in:
+      name: Innen‑Temperatur‑Sensor
+      selector:
+        entity:
+          domain: sensor
+    temp_out:
+      name: Außen‑Temperatur‑Sensor
+      selector:
+        entity:
+          domain: sensor
+    dew_in:
+      name: Taupunkt innen
+      selector:
+        entity:
+          domain: sensor
+    dew_out:
+      name: Taupunkt außen
+      selector:
+        entity:
+          domain: sensor
+    enthalpy_in:
+      name: Entalpie innen (optional)
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    enthalpy_out:
+      name: Entalpie außen (optional)
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    forecast_low:
+      name: Forecast Low (nächste 6 h) (optional)
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    forecast_high:
+      name: Forecast High (nächste 12 h) (optional)
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    comfort_helper:
+      name: Globaler Komfort‑Setpoint (input_number, optional)
+      default: ""
+      selector:
+        entity:
+          domain: input_number
+    min_delta_helper:
+      name: ΔT‑Schwelle zum Öffnen (input_number)
+      selector:
+        entity:
+          domain: input_number
+    hysteresis_helper:
+      name: ΔT‑Hysterese zum Schließen (input_number)
+      selector:
+        entity:
+          domain: input_number
+    heating_active:
+      name: Entität „Heizung aktiv“ (input_boolean)
+      selector:
+        entity:
+          domain: input_boolean
+    window_sensors:
+      name: Fensterkontakte (optional)
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: window
+          multiple: true
+    recommendation_boolean:
+      name: Ziel‑Helper (input_boolean)
+      selector:
+        entity:
+          domain: input_boolean
+    notify_group:
+      name: Notify‑Service oder -Gruppe (optional)
+      default: ""
+      selector:
+        text: {}
+    allow_night:
+      name: Nachts lüften erlauben?
+      default: true
+      selector:
+        boolean: {}
+    time_start:
+      name: Startzeit Lüftungsfenster (HH:MM:SS)
+      default: "06:00:00"
+      selector:
+        text:
+          multiline: false
+    time_end:
+      name: Endzeit Lüftungsfenster (HH:MM:SS)
+      default: "22:00:00"
+      selector:
+        text:
+          multiline: false
+    debug_log:
+      name: Debug‑Log aktivieren?
+      default: false
+      selector:
+        boolean: {}
 
-input:
-  room_slug:
-    name: Raum‑Slug (nur Buchstaben/Zahl, ohne Leerzeichen)
-    description: Kurzname des Raums, taucht in Benachrichtigungen auf.
-  temp_in:
-    name: Innen‑Temperatursensor
-    selector:
-      entity:
-        domain: sensor
-  temp_out:
-    name: Außen‑Temperatursensor
-    selector:
-      entity:
-        domain: sensor
-  dew_in:
-    name: Taupunkt (innen)
-    selector:
-      entity:
-        domain: sensor
-  dew_out:
-    name: Taupunkt (außen)
-    selector:
-      entity:
-        domain: sensor
-  enthalpy_in:
-    name: Entalpie (innen) – optional
-    default: ""
-    selector:
-      entity:
-        domain: sensor
-        multiple: false
-  enthalpy_out:
-    name: Entalpie (außen) – optional
-    default: ""
-    selector:
-      entity:
-        domain: sensor
-        multiple: false
-  forecast_low:
-    name: Forecast‑Low (nächste 6 h) – optional
-    default: ""
-    selector:
-      entity:
-        domain: sensor
-        multiple: false
-  forecast_high:
-    name: Forecast‑High (nächste 12 h) – optional
-    default: ""
-    selector:
-      entity:
-        domain: sensor
-        multiple: false
-  comfort_helper:
-    name: Globales Komfort‑Setpoint (input_number)
-    description: Wird genutzt, um den Komfort‑Schwellwert zentral zu verwalten.
-    default: ""
-    selector:
-      entity:
-        domain: input_number
-        multiple: false
-  min_delta_helper:
-    name: ΔT zum Öffnen – Helper (input_number)
-    description: Gibt die Temperaturdifferenz an, ab der geöffnet werden soll.
-    default: ""
-    selector:
-      entity:
-        domain: input_number
-        multiple: false
-  hysteresis_helper:
-    name: Hysterese zum Schließen – Helper (input_number)
-    description: Gibt an, wie weit ΔT fallen darf, bevor wieder geschlossen wird.
-    default: ""
-    selector:
-      entity:
-        domain: input_number
-        multiple: false
-  heating_active:
-    name: Entität „Heizung aktiv“ (Bool)
-    selector:
-      entity:
-        domain: input_boolean
-        multiple: false
-  window_sensors:
-    name: Fensterkontakte (optional)
-    default: []
-    selector:
-      entity:
-        domain: binary_sensor
-        device_class: window
-        multiple: true
-  recommendation_boolean:
-    name: Ziel‑Helper (input_boolean)
-    selector:
-      entity:
-        domain: input_boolean
-  notify_group:
-    name: Notify‑Service / Notify‑Gruppe (optional)
-    default: ""
-  allow_night:
-    name: Nachts lüften erlauben?
-    default: true
-    selector:
-      boolean: {}
-  time_start:
-    name: Startzeit Lüftungsfenster (HH:MM:SS)
-    default: "06:00:00"
-  time_end:
-    name: Endzeit Lüftungsfenster (HH:MM:SS)
-    default: "22:00:00"
-  debug_log:
-    name: Debug‑Log aktivieren?
-    default: false
-    selector:
-      boolean: {}
-
-# -----------------------------------------------------------------
 variables:
   room: !input room_slug
-  # helper ids
-  min_delta_helper_id: !input min_delta_helper
-  reopen_helper_id: !input hysteresis_helper
-  comfort_helper_id: !input comfort_helper
-  # helper values (fallbacks)
-  min_delta: >
-    {% if min_delta_helper_id %}
-      {{ states(min_delta_helper_id) | float(default=2) }}
-    {% else %} 2 {% endif %}
-  reopen_delta: >
-    {% if reopen_helper_id %}
-      {{ states(reopen_helper_id) | float(default=1) }}
-    {% else %} 1 {% endif %}
+  min_delta_entity: !input min_delta_helper
+  hysteresis_entity: !input hysteresis_helper
+  comfort_entity: !input comfort_helper
+  # Helper‑Werte (mit Fallback)
+  min_delta: "{{ states(min_delta_entity)|float(default=2) }}"
+  reopen_delta: "{{ states(hysteresis_entity)|float(default=1) }}"
   comfort_val: >
-    {% if comfort_helper_id %}
-      {{ states(comfort_helper_id) | float(default=25) }}
+    {% if comfort_entity %}
+      {{ states(comfort_entity)|float(default=25) }}
     {% else %} 25 {% endif %}
 
-  # entity ids
+  # Sensor‑Entitäten
   temp_in_entity: !input temp_in
   temp_out_entity: !input temp_out
   dew_in_entity: !input dew_in
   dew_out_entity: !input dew_out
   enth_in_entity: !input enthalpy_in
   enth_out_entity: !input enthalpy_out
-  forecast_low_entity: !input forecast_low
-  forecast_high_entity: !input forecast_high
+  f_low_entity: !input forecast_low
+  f_high_entity: !input forecast_high
   heating_entity: !input heating_active
-  rec_bool_entity: !input recommendation_boolean
+  rec_entity: !input recommendation_boolean
   notify_target: !input notify_group
   window_entities: !input window_sensors
 
-  # current readings
-  temp_in: "{{ states(temp_in_entity)  | float(default=99) }}"
-  temp_out: "{{ states(temp_out_entity) | float(default=-99) }}"
-  dew_in: "{{ states(dew_in_entity)  | float(default=99) }}"
-  dew_out: "{{ states(dew_out_entity) | float(default=-99) }}"
-  enth_in: >
-    {% if enth_in_entity %}
-      {{ states(enth_in_entity) | float(default=0) }}
-    {% else %} 0 {% endif %}
-  enth_out: >
-    {% if enth_out_entity %}
-      {{ states(enth_out_entity) | float(default=0) }}
-    {% else %} 0 {% endif %}
-  f_low: >
-    {% if forecast_low_entity %}
-      {{ states(forecast_low_entity) | float(default=99) }}
-    {% else %} 99 {% endif %}
-  f_high: >
-    {% if forecast_high_entity %}
-      {{ states(forecast_high_entity) | float(default=-99) }}
-    {% else %} -99 {% endif %}
+  # Aktuelle Messwerte
+  temp_in: "{{ states(temp_in_entity)|float(default=99) }}"
+  temp_out: "{{ states(temp_out_entity)|float(default=-99) }}"
+  dew_in: "{{ states(dew_in_entity)|float(default=99) }}"
+  dew_out: "{{ states(dew_out_entity)|float(default=-99) }}"
+  enth_in: "{{ states(enth_in_entity)|float(default=0) }}"
+  enth_out: "{{ states(enth_out_entity)|float(default=0) }}"
+  f_low: "{{ states(f_low_entity)|float(default=99) }}"
+  f_high: "{{ states(f_high_entity)|float(default=-99) }}"
 
-  # heater & recommendation state
+  # Interne Flags
+  delta_t: "{{ temp_in - temp_out }}"
   heating_on: "{{ is_state(heating_entity, 'on') }}"
-  rec_state: "{{ states(rec_bool_entity) }}"  # 'on' / 'off'
+  rec_state: "{{ states(rec_entity) }}"
 
-  # time window check
+  # Zeitfenster
   allow_night_flag: !input allow_night
-  start_time: !input time_start
-  end_time: !input time_end
   timeframe_ok: >
     {% if allow_night_flag %}
       true
     {% else %}
-      {% set now_time = now().strftime('%H:%M:%S') %}
-      {{ start_time <= now_time <= end_time }}
+      {% set n = now().strftime('%H:%M:%S') %}
+      {{ (!input time_start) <= n <= (!input time_end) }}
     {% endif %}
 
-  # condition flags
-  delta_t: "{{ temp_in - temp_out }}"
+  # Bedingungen
   temp_ok: >
     {% if rec_state == 'on' %}
       {{ delta_t | float > reopen_delta }}
@@ -224,15 +197,12 @@ variables:
       {{ enth_out < enth_in }}
     {% else %} true {% endif %}
   forecast_ok: >
-    {% if forecast_low_entity %}
+    {% if f_low_entity %}
       {{ (temp_in > comfort_val) and (f_low < temp_in - 1) }}
     {% else %} true {% endif %}
-  should_ventilate: >
-    {{ temp_ok and dew_ok and enth_ok and forecast_ok and timeframe_ok and (not heating_on) }}
-
+  should_vent: "{{ temp_ok and dew_ok and enth_ok and forecast_ok and timeframe_ok and (not heating_on) }}"
   debug_on: !input debug_log
 
-# -----------------------------------------------------------------
 trigger:
   - platform: time_pattern
     minutes: "/10"
@@ -247,52 +217,45 @@ trigger:
       - !input heating_active
       - !input forecast_low
       - !input forecast_high
-      - "{{ min_delta_helper_id if min_delta_helper_id else none }}"
-      - "{{ reopen_helper_id if reopen_helper_id else none }}"
-      - "{{ comfort_helper_id if comfort_helper_id else none }}"
 
-# -----------------------------------------------------------------
 action:
   - choose:
       - conditions:
-          - "{{ should_ventilate }}"
+          - "{{ should_vent }}"
           - "{{ rec_state != 'on' }}"
         sequence:
           - service: homeassistant.turn_on
             target:
-              entity_id: "{{ rec_bool_entity }}"
+              entity_id: "{{ rec_entity }}"
           - choose:
               - conditions: "{{ notify_target != '' }}"
                 sequence:
                   - service: "{{ notify_target }}"
                     data:
-                      message: >
-                        💨 *{{ room }}*: Lüften empfohlen (ΔT {{ delta_t | round(1) }} K).
+                      message: "💨 *{{ room }}*: Lüften empfohlen (ΔT {{ delta_t|round(1) }} K)."
       - conditions:
-          - "{{ not should_ventilate }}"
+          - "{{ not should_vent }}"
           - "{{ rec_state == 'on' }}"
         sequence:
           - service: homeassistant.turn_off
             target:
-              entity_id: "{{ rec_bool_entity }}"
+              entity_id: "{{ rec_entity }}"
           - choose:
               - conditions: "{{ notify_target != '' }}"
                 sequence:
                   - service: "{{ notify_target }}"
                     data:
-                      message: >
-                        🪟 *{{ room }}*: Fenster schließen (ΔT {{ delta_t | round(1) }} K).
-
+                      message: "🪟 *{{ room }}*: Fenster schließen (ΔT {{ delta_t|round(1) }} K)."
   - choose:
       - conditions: "{{ debug_on }}"
         sequence:
           - service: logbook.log
             data:
-              name: "Ventilation Debug"
-              entity_id: "{{ rec_bool_entity }}"
+              name: Ventilation Debug
+              entity_id: "{{ rec_entity }}"
               message: >
-                Lüften={{ 'JA' if should_ventilate else 'NEIN' }} | ΔT={{ delta_t | round(1) }}K
-                ΔT_OK={{ temp_ok }} τ_OK={{ dew_ok }} enth_OK={{ enth_ok }} fc_OK={{ forecast_ok }}
-                Heizung={{ 'AN' if heating_on else 'AUS' }} Zeit_OK={{ timeframe_ok }}
+                Lüften={{ 'JA' if should_vent else 'NEIN' }} | ΔT={{ delta_t|round(1) }}K |
+                temp_OK={{ temp_ok }} τ_OK={{ dew_ok }} enth_OK={{ enth_ok }} fc_OK={{ forecast_ok }} |
+                Heizung={{ 'AN' if heating_on else 'AUS' }} timeframe_OK={{ timeframe_ok }}
 
 mode: single
