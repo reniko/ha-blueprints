@@ -21,7 +21,7 @@ blueprint:
     a weather forecast and respects a time window so ground‑floor rooms stay closed overnight.
   domain: automation
 
-  source_url: https://github.com/reniko/ha-blueprints/blob/main/ventilation_v0_6.yaml
+  source_url: https://github.com/reniko/ha-blueprints/blob/main/ventilation.yaml
 
 input:
   room_slug:
