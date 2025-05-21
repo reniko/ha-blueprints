@@ -1,4 +1,4 @@
-# Ventilation Recommendation (forecast + time window, v0.4.1)
+# Ventilation Recommendation (forecast + time window, v0.4.2)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT, ΔTaupunkt
@@ -7,7 +7,7 @@
 # - Writes to an input_boolean and (optionally) pushes a notification
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + time window, v0.4.1)
+  name: Ventilation Recommendation (forecast + time window, v0.4.2)
   description: >
     Recommends manual window ventilation for a single room based on
     indoor/outdoor sensors, heating state, configurable comfort limits,
@@ -251,19 +251,15 @@ action:
                     data:
                       message: "🪟 Bitte Fenster in {{ room }} schließen."
 
-  # Debug -----------------------------------------------------------------
   - choose:
       - conditions: "{{ debug_on }}"
         sequence:
-          - service: system_log.write
+          - service: logbook.log
             data:
-              level: info
+              name: "Ventilation Debug"
               message: >
-                Lüften‑Debug {{ room }}:\n
-                  ΔT‑OK {{ temp_ok }} OUT {{ temp_out }} < IN {{ temp_in }} – Δ {{ min_tempdiff }}\n
-                  Tau‑OK {{ dew_ok }} OUT {{ dew_out|round(1) }} < IN {{ dew_in|round(1) }}\n
-                  Enth‑OK {{ enth_ok }} OUT {{ enth_out|round(1) }} < IN {{ enth_in|round(1) }}\n
-                  Fore‑OK {{ forecast_ok }} Low {{ f_low }} < {{ comfort_max }} ; High {{ f_high }} > IN {{ temp_in }}\n
-                  Zeit‑OK {{ timeframe_ok }} {{ current_time }} innerhalb Fenster\n
-                  Heizung {{ 'AN' if heating_on else 'AUS' }}\n
-                  ⇒ Lüften {{ 'JA' if should_ventilate else 'NEIN' }}"
+                ΔT-OK {{ temp_ok }} | Tau-OK {{ dew_ok }} |
+                Enth-OK {{ enth_ok }} | Forecast-OK {{ forecast_ok }} |
+                Zeit-OK {{ timeframe_ok }} | Heizung {{ 'AN' if heating_on else 'AUS' }} →
+                Lüften {{ 'JA' if should_ventilate else 'NEIN' }}
+              entity_id: "{{ rec_bool_entity }}"
