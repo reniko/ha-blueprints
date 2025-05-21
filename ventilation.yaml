@@ -1,14 +1,13 @@
-# Home Assistant Blueprint – Ventilation Recommendation (per room, v0.4.2)
+# Home Assistant Blueprint – Ventilation Recommendation (per room, v0.4.3)
 # -------------------------------------------------------------------------
-# VERSION: 0.4.2  (2025‑05‑21)
+# VERSION: 0.4.3  (2025‑05‑21)
 # Changelog
-#   • Fixed Jinja template syntax (states('!input …') instead of states(!input …))
-#   • Removed pressure sensors completely (no inputs, no logic, no triggers)
-#   • Added version tag to blueprint *name* for easy update detection
-#   • Minor cleanup of debug block & notify check
+#   • Fixed Jinja syntax: use "{{ !input xyz | float }}" instead of float(!input xyz)
+#   • Removed all pressure logic & inputs permanently
+#   • Added version in blueprint *name*
 # -------------------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + time window, v0.4.2)
+  name: Ventilation Recommendation (forecast + time window, v0.4.3)
   description: |
     Calculates whether window ventilation is advisable for a single room, based on
     indoor/outdoor temperature, dew‑point and (optionally) enthalpy, daily **or** hourly
@@ -19,8 +18,7 @@ blueprint:
 
   input:
     room_slug:
-      name: Room slug
-      description: "Short lowercase slug used to build entity IDs for helpers (e.g. wohnzimmer)"
+      name: Room slug (lowercase, no spaces)
     temp_in:
       selector: { entity: { domain: sensor } }
       name: Indoor temperature sensor
@@ -114,37 +112,41 @@ trigger:
 
 variables:
   room: !input room_slug
-  min_tempdiff: "{{ float(!input min_temp_diff) }}"
-  comfort_max: "{{ float(!input comfort_max) }}"
 
-  temp_in: "{{ states('!input temp_in') | float }}"
-  temp_out: "{{ states('!input temp_out') | float }}"
-  dew_in: "{{ states('!input dew_in') | float }}"
-  dew_out: "{{ states('!input dew_out') | float }}"
+  min_tempdiff: "{{ !input min_temp_diff | float }}"
+  comfort_max: "{{ !input comfort_max | float }}"
+
+  temp_in: "{{ states(!input temp_in) | float }}"
+  temp_out: "{{ states(!input temp_out) | float }}"
+  dew_in: "{{ states(!input dew_in) | float }}"
+  dew_out: "{{ states(!input dew_out) | float }}"
+
   enth_in: >
-    {% if '!input enthalpy_in' %}{{ states('!input enthalpy_in') | float }}{% else %}0{% endif %}
+    {% if !input enthalpy_in %}{{ states(!input enthalpy_in) | float }}{% else %}0{% endif %}
   enth_out: >
-    {% if '!input enthalpy_out' %}{{ states('!input enthalpy_out') | float }}{% else %}0{% endif %}
-  f_high: >
-    {% if '!input forecast_high' %}{{ states('!input forecast_high') | float }}{% else %}-99{% endif %}
-  f_low: >
-    {% if '!input forecast_low' %}{{ states('!input forecast_low') | float }}{% else %}99{% endif %}
+    {% if !input enthalpy_out %}{{ states(!input enthalpy_out) | float }}{% else %}0{% endif %}
 
-  heating_on: "{{ is_state('!input heating_active', 'on') }}"
+  f_high: >
+    {% if !input forecast_high %}{{ states(!input forecast_high) | float }}{% else %}-99{% endif %}
+  f_low: >
+    {% if !input forecast_low %}{{ states(!input forecast_low) | float }}{% else %}99{% endif %}
+
+  heating_on: "{{ is_state(!input heating_active, 'on') }}"
   now_time: "{{ now().strftime('%H:%M:%S') }}"
+
   timeframe_ok: >
     {% if !input allow_night %}true{% else %}
-      {{ '!input time_start' <= now().strftime('%H:%M:%S') < '!input time_end' }}
+      {{ !input time_start <= now().strftime('%H:%M:%S') < !input time_end }}
     {% endif %}
 
   temp_ok: "{{ temp_out < (temp_in - min_tempdiff) }}"
   dew_ok:  "{{ dew_out  < dew_in }}"
   enth_ok: >
-    {% if '!input enthalpy_in' and '!input enthalpy_out' %}
+    {% if !input enthalpy_in and !input enthalpy_out %}
       {{ enth_out < enth_in }}
     {% else %}true{% endif %}
   forecast_ok: >
-    {% if '!input forecast_high' and '!input forecast_low' %}
+    {% if !input forecast_high and !input forecast_low %}
       {{ (f_low < comfort_max) and (f_high > temp_in) }}
     {% else %}true{% endif %}
 
@@ -154,29 +156,29 @@ variables:
 action:
   - choose:
       - conditions: >
-          {{ should_ventilate and is_state('!input recommendation_boolean', 'off') }}
+          {{ should_ventilate and is_state(!input recommendation_boolean, 'off') }}
         sequence:
           - service: input_boolean.turn_on
             target: { entity_id: !input recommendation_boolean }
           - choose:
-              - conditions: "{{ '!input notify_group' != '' }}"
+              - conditions: "{{ !input notify_group != '' }}"
                 sequence:
                   - service: !input notify_group
                     data:
                       message: "💨 Bitte {{ room }} lüften (Fenster öffnen)."
       - conditions: >
-          {{ (not should_ventilate) and is_state('!input recommendation_boolean', 'on') }}
+          {{ (not should_ventilate) and is_state(!input recommendation_boolean, 'on') }}
         sequence:
           - service: input_boolean.turn_off
             target: { entity_id: !input recommendation_boolean }
           - choose:
-              - conditions: "{{ '!input notify_group' != '' }}"
+              - conditions: "{{ !input notify_group != '' }}"
                 sequence:
                   - service: !input notify_group
                     data:
                       message: "🪟 Bitte Fenster in {{ room }} schließen."
   - choose:
-      - conditions: "{{ '!input debug_log' | bool }}"
+      - conditions: "{{ !input debug_log | bool }}"
         sequence:
           - service: system_log.write
             data:
@@ -187,6 +189,6 @@ action:
                   D-OK: {{ dew_ok  }} OUT {{ dew_out|round(1) }} < IN {{ dew_in|round(1) }}
                   H-OK: {{ enth_ok }} OUT {{ enth_out|round(1) }} < IN {{ enth_in|round(1) }}
                   F-OK: {{ forecast_ok }} Low {{ f_low }} < {{ comfort_max }} ; High {{ f_high }} > IN {{ temp_in }}
-                  TF-OK: {{ timeframe_ok }} {{ '!input time_start' }}<{{ now_time }}<{{ '!input time_end' }}
+                  TF-OK: {{ timeframe_ok }} {{ !input time_start }}<{{ now_time }}<{{ !input time_end }}
                   HZ-OK: {{ not heating_on }}  Heizung {{ 'AN' if heating_on else 'AUS' }}
                   ➜ VENTILATE = {{ 'JA' if should_ventilate else 'NEIN' }}
