@@ -1,27 +1,27 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.5.0)
+# Ventilation Recommendation (forecast + hysteresis, v0.6.0)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
 # - Optional: Enthalpy comparison
 # - Optional: Weather‑forecast check using «forecast_low» (next 6 h) and «forecast_high» (next 12 h)
 # - Optional: Time window (disable night ventilation)
-# - Reads a **global comfort temperature** from an *input_number* helper
-#   so you can change the comfort threshold at one place.
+# - All temperature thresholds (ΔT to open, hysteresis to close, comfort set‑point)
+#   are now read from **input_number helpers** so you can retune them from the UI.
 # - Writes result to an input_boolean and (optionally) sends a push notification.
 # - Debug output goes to Logbook via logbook.log, attached to the same boolean entity.
 #
-# 2025‑05‑21 – v0.5.0  (complete rewrite with helper + hysteresis)
+# 2025‑05‑21 – v0.6.0  (min/open & hysteresis moved to helpers, removed comfort_max input)
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.5.0)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.6.0)
   description: >
     Recommends when to open/close windows for passive cooling of a room.
     It compares indoor vs. outdoor temperature, dew point (and optional enthalpy),
-    checks a global comfort temperature, optionally evaluates a weather forecast
-    and respects a time window so ground‑floor rooms stay closed overnight.
+    checks user‑defined thresholds from input_number helpers, optionally evaluates
+    a weather forecast and respects a time window so ground‑floor rooms stay closed overnight.
   domain: automation
 
-  source_url: https://github.com/reniko/ha-blueprints/blob/main/ventilation_v0_5.yaml
+  source_url: https://github.com/reniko/ha-blueprints/blob/main/ventilation_v0_6.yaml
 
 input:
   room_slug:
@@ -77,21 +77,28 @@ input:
         multiple: false
   comfort_helper:
     name: Globales Komfort‑Setpoint (input_number)
-    description: Wird genutzt, um den Komfort‑Schwellwert zentral zu verwalten. Leer lassen, um den statischen Wert zu verwenden.
+    description: Wird genutzt, um den Komfort‑Schwellwert zentral zu verwalten.
     default: ""
     selector:
       entity:
         domain: input_number
         multiple: false
-  comfort_max:
-    name: Komfort‑Obergrenze (°C) – Fallback
-    default: 25
-  min_temp_diff:
-    name: ΔT zum Öffnen (°C)
-    default: 2
-  reopen_hysteresis:
-    name: Hysterese zum Schließen (°C)
-    default: 1
+  min_delta_helper:
+    name: ΔT zum Öffnen – Helper (input_number)
+    description: Gibt die Temperaturdifferenz an, ab der geöffnet werden soll.
+    default: ""
+    selector:
+      entity:
+        domain: input_number
+        multiple: false
+  hysteresis_helper:
+    name: Hysterese zum Schließen – Helper (input_number)
+    description: Gibt an, wie weit ΔT fallen darf, bevor wieder geschlossen wird.
+    default: ""
+    selector:
+      entity:
+        domain: input_number
+        multiple: false
   heating_active:
     name: Entität „Heizung aktiv“ (Bool)
     selector:
@@ -134,17 +141,22 @@ input:
 # -----------------------------------------------------------------
 variables:
   room: !input room_slug
-  # thresholds
-  min_delta: !input min_temp_diff
-  reopen_delta: !input reopen_hysteresis
-  comfort_fallback: !input comfort_max
+  # thresholds via helpers (fallbacks: open 2 K, hysteresis 1 K, comfort 25 °C)
+  min_delta_helper: !input min_delta_helper
+  reopen_helper: !input hysteresis_helper
   comfort_helper: !input comfort_helper
+  min_delta: >
+    {% if min_delta_helper %}
+      {{ states(min_delta_helper) | float(default=2) }}
+    {% else %} 2 {% endif %}
+  reopen_delta: >
+    {% if reopen_helper %}
+      {{ states(reopen_helper) | float(default=1) }}
+    {% else %} 1 {% endif %}
   comfort_val: >
     {% if comfort_helper %}
-      {{ states(comfort_helper) | float(default=comfort_fallback) }}
-    {% else %}
-      {{ comfort_fallback }}
-    {% endif %}
+      {{ states(comfort_helper) | float(default=25) }}
+    {% else %} 25 {% endif %}
 
   # entity ids
   temp_in_entity: !input temp_in
@@ -202,9 +214,9 @@ variables:
   delta_t: "{{ temp_in - temp_out }}"
   temp_ok: >
     {% if rec_state == 'on' %}
-      {{ delta_t | float > reopen_delta | float }}
+      {{ delta_t | float > reopen_delta }}
     {% else %}
-      {{ delta_t | float > min_delta | float }}
+      {{ delta_t | float > min_delta }}
     {% endif %}
   dew_ok: "{{ dew_out < dew_in }}"
   enth_ok: >
@@ -235,6 +247,9 @@ trigger:
       - !input heating_active
       - !input forecast_low
       - !input forecast_high
+      - "{{ min_delta_helper if min_delta_helper else none }}"
+      - "{{ hysteresis_helper if hysteresis_helper else none }}"
+      - "{{ comfort_helper if comfort_helper else none }}"
 
 # -----------------------------------------------------------------
 action:
@@ -259,25 +274,4 @@ action:
         sequence:
           - service: homeassistant.turn_off
             target:
-              entity_id: "{{ rec_bool_entity }}"
-          - choose:
-              - conditions: >
-                  {{ notify_target != '' }}
-                sequence:
-                  - service: "{{ notify_target }}"
-                    data:
-                      message: "🪟 *{{ room }}*: Fenster schließen empfohlen."
-  # Debug to Logbook
-  - choose:
-      - conditions: "{{ debug_on }}"
-        sequence:
-          - service: logbook.log
-            data:
-              name: "Ventilation Debug"
-              entity_id: "{{ rec_bool_entity }}"
-              message: >
-                ΔT {{ delta_t | round(1) }} | temp_ok {{ temp_ok }} | dew_ok {{ dew_ok }} |
-                enth_ok {{ enth_ok }} | forecast_ok {{ forecast_ok }} | timeframe_ok {{ timeframe_ok }} |
-                heating {{ heating_on }} → vent {{ should_ventilate }}
-
-mode: single
+              entity
