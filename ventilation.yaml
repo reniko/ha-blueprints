@@ -1,16 +1,18 @@
-# Home Assistant Blueprint – Ventilation Recommendation (per room, v0.4.4)
+# Home Assistant Blueprint – Ventilation Recommendation (per room, v0.4.5)
 # -------------------------------------------------------------------------
-# VERSION: 0.4.4  (2025‑05‑21)
+# VERSION: 0.4.5  (2025‑05‑21)
 # Changelog
-#   • FIX: all Jinja template calls now quote the !input reference → states('!input temp_in')
-#          & is_state('!input heating_active', 'on'). Removes TemplateSyntaxError.
-#   • Name updated so HA shows new version immediately.
-#   • Pressure logic removed; rest unchanged.
+#   • Quote all !input references inside Jinja templates → "'!input xyz'"
+#   • Removes TemplateSyntaxError: unexpected char '!'
+#   • Pressure inputs removed (v0.4.2)
 # -------------------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + time window, v0.4.4)
+  name: Ventilation Recommendation (forecast + time window, v0.4.5)
   description: |
-    Calculates whether window ventilation is advisable for a single room…
+    Calculates whether window ventilation is advisable for a single room, based on
+    indoor/outdoor temperature, dew‑point and (optionally) enthalpy, daily or hourly
+    forecast, heating state and a configurable time window. Writes the result to an
+    input_boolean helper and (optionally) sends a push notification via a notify group.
   domain: automation
   source_url: https://github.com/reniko/ha-blueprints/blob/main/ventilation.yaml
 
@@ -110,8 +112,8 @@ trigger:
 
 variables:
   room: !input room_slug
-  min_tempdiff: "{{ (!input min_temp_diff) | float }}"
-  comfort_max: "{{ (!input comfort_max) | float }}"
+  min_tempdiff: "{{ '!input min_temp_diff' | float }}"
+  comfort_max: "{{ '!input comfort_max' | float }}"
 
   temp_in: "{{ states('!input temp_in') | float }}"
   temp_out: "{{ states('!input temp_out') | float }}"
@@ -119,31 +121,31 @@ variables:
   dew_out: "{{ states('!input dew_out') | float }}"
 
   enth_in: >
-    {% if !input enthalpy_in %}{{ states('!input enthalpy_in') | float }}{% else %}0{% endif %}
+    {% if '!input enthalpy_in' %}{{ states('!input enthalpy_in') | float }}{% else %}0{% endif %}
   enth_out: >
-    {% if !input enthalpy_out %}{{ states('!input enthalpy_out') | float }}{% else %}0{% endif %}
+    {% if '!input enthalpy_out' %}{{ states('!input enthalpy_out') | float }}{% else %}0{% endif %}
 
   f_high: >
-    {% if !input forecast_high %}{{ states('!input forecast_high') | float }}{% else %}-99{% endif %}
+    {% if '!input forecast_high' %}{{ states('!input forecast_high') | float }}{% else %}-99{% endif %}
   f_low: >
-    {% if !input forecast_low %}{{ states('!input forecast_low') | float }}{% else %}99{% endif %}
+    {% if '!input forecast_low' %}{{ states('!input forecast_low') | float }}{% else %}99{% endif %}
 
   heating_on: "{{ is_state('!input heating_active', 'on') }}"
   now_time: "{{ now().strftime('%H:%M:%S') }}"
 
   timeframe_ok: >
-    {% if !input allow_night %}true{% else %}
+    {% if '!input allow_night' %}true{% else %}
       {{ '!input time_start' <= now().strftime('%H:%M:%S') < '!input time_end' }}
     {% endif %}
 
   temp_ok: "{{ temp_out < (temp_in - min_tempdiff) }}"
   dew_ok:  "{{ dew_out  < dew_in }}"
   enth_ok: >
-    {% if !input enthalpy_in and !input enthalpy_out %}
+    {% if '!input enthalpy_in' and '!input enthalpy_out' %}
       {{ enth_out < enth_in }}
     {% else %}true{% endif %}
   forecast_ok: >
-    {% if !input forecast_high and !input forecast_low %}
+    {% if '!input forecast_high' and '!input forecast_low' %}
       {{ (f_low < comfort_max) and (f_high > temp_in) }}
     {% else %}true{% endif %}
 
@@ -157,7 +159,7 @@ action:
           - service: input_boolean.turn_on
             target: { entity_id: !input recommendation_boolean }
           - choose:
-              - conditions: "{{ !input notify_group != '' }}"
+              - conditions: "{{ '!input notify_group' != '' }}"
                 sequence:
                   - service: !input notify_group
                     data:
@@ -167,13 +169,13 @@ action:
           - service: input_boolean.turn_off
             target: { entity_id: !input recommendation_boolean }
           - choose:
-              - conditions: "{{ !input notify_group != '' }}"
+              - conditions: "{{ '!input notify_group' != '' }}"
                 sequence:
                   - service: !input notify_group
                     data:
                       message: "🪟 Bitte Fenster in {{ room }} schließen."
   - choose:
-      - conditions: "{{ !input debug_log | bool }}"
+      - conditions: "{{ '!input debug_log' | bool }}"
         sequence:
           - service: system_log.write
             data:
