@@ -1,4 +1,4 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.6.0)
+# Ventilation Recommendation (forecast + hysteresis, v0.6.1)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
@@ -10,12 +10,12 @@
 # - Writes result to an input_boolean and (optionally) sends a push notification.
 # - Debug output goes to Logbook via logbook.log, attached to the same boolean entity.
 #
-# 2025‑05‑21 – v0.6.0  (min/open & hysteresis moved to helpers, removed comfort_max input)
+# 2025‑05‑21 – v0.6.1  (fix YAML colons, complete turn_off branch, helper variables)
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.6.0)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.6.1)
   description: >
-    Recommends when to open/close windows for passive cooling of a room.
+    Recommends when to open / close windows for passive cooling of a room.
     It compares indoor vs. outdoor temperature, dew point (and optional enthalpy),
     checks user‑defined thresholds from input_number helpers, optionally evaluates
     a weather forecast and respects a time window so ground‑floor rooms stay closed overnight.
@@ -141,21 +141,22 @@ input:
 # -----------------------------------------------------------------
 variables:
   room: !input room_slug
-  # thresholds via helpers (fallbacks: open 2 K, hysteresis 1 K, comfort 25 °C)
-  min_delta_helper: !input min_delta_helper
-  reopen_helper: !input hysteresis_helper
-  comfort_helper: !input comfort_helper
+  # helper ids
+  min_delta_helper_id: !input min_delta_helper
+  reopen_helper_id: !input hysteresis_helper
+  comfort_helper_id: !input comfort_helper
+  # helper values (fallbacks)
   min_delta: >
-    {% if min_delta_helper %}
-      {{ states(min_delta_helper) | float(default=2) }}
+    {% if min_delta_helper_id %}
+      {{ states(min_delta_helper_id) | float(default=2) }}
     {% else %} 2 {% endif %}
   reopen_delta: >
-    {% if reopen_helper %}
-      {{ states(reopen_helper) | float(default=1) }}
+    {% if reopen_helper_id %}
+      {{ states(reopen_helper_id) | float(default=1) }}
     {% else %} 1 {% endif %}
   comfort_val: >
-    {% if comfort_helper %}
-      {{ states(comfort_helper) | float(default=25) }}
+    {% if comfort_helper_id %}
+      {{ states(comfort_helper_id) | float(default=25) }}
     {% else %} 25 {% endif %}
 
   # entity ids
@@ -172,10 +173,10 @@ variables:
   notify_target: !input notify_group
   window_entities: !input window_sensors
 
-  # current values (floats)
+  # current readings
   temp_in: "{{ states(temp_in_entity)  | float(default=99) }}"
-  temp_out:"{{ states(temp_out_entity) | float(default=-99) }}"
-  dew_in:  "{{ states(dew_in_entity)  | float(default=99) }}"
+  temp_out: "{{ states(temp_out_entity) | float(default=-99) }}"
+  dew_in: "{{ states(dew_in_entity)  | float(default=99) }}"
   dew_out: "{{ states(dew_out_entity) | float(default=-99) }}"
   enth_in: >
     {% if enth_in_entity %}
@@ -206,8 +207,8 @@ variables:
     {% if allow_night %}
       true
     {% else %}
-      {% set now = now().strftime('%H:%M:%S') %}
-      {{ start_time <= now <= end_time }}
+      {% set now_time = now().strftime('%H:%M:%S') %}
+      {{ start_time <= now_time <= end_time }}
     {% endif %}
 
   # condition flags
@@ -247,9 +248,9 @@ trigger:
       - !input heating_active
       - !input forecast_low
       - !input forecast_high
-      - "{{ min_delta_helper if min_delta_helper else none }}"
-      - "{{ hysteresis_helper if hysteresis_helper else none }}"
-      - "{{ comfort_helper if comfort_helper else none }}"
+      - "{{ min_delta_helper_id if min_delta_helper_id else none }}"
+      - "{{ reopen_helper_id if reopen_helper_id else none }}"
+      - "{{ comfort_helper_id if comfort_helper_id else none }}"
 
 # -----------------------------------------------------------------
 action:
@@ -274,4 +275,4 @@ action:
         sequence:
           - service: homeassistant.turn_off
             target:
-              entity
+              entity_id: "
