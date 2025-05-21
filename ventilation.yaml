@@ -1,18 +1,16 @@
-# Home Assistant Blueprint – Ventilation Recommendation (per room, v0.4.3)
+# Home Assistant Blueprint – Ventilation Recommendation (per room, v0.4.4)
 # -------------------------------------------------------------------------
-# VERSION: 0.4.3  (2025‑05‑21)
+# VERSION: 0.4.4  (2025‑05‑21)
 # Changelog
-#   • Fixed Jinja syntax: use "{{ !input xyz | float }}" instead of float(!input xyz)
-#   • Removed all pressure logic & inputs permanently
-#   • Added version in blueprint *name*
+#   • FIX: all Jinja template calls now quote the !input reference → states('!input temp_in')
+#          & is_state('!input heating_active', 'on'). Removes TemplateSyntaxError.
+#   • Name updated so HA shows new version immediately.
+#   • Pressure logic removed; rest unchanged.
 # -------------------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + time window, v0.4.3)
+  name: Ventilation Recommendation (forecast + time window, v0.4.4)
   description: |
-    Calculates whether window ventilation is advisable for a single room, based on
-    indoor/outdoor temperature, dew‑point and (optionally) enthalpy, daily **or** hourly
-    forecast, heating state and a configurable time window. Writes the result to an
-    input_boolean helper and (optionally) sends a push notification via a notify group.
+    Calculates whether window ventilation is advisable for a single room…
   domain: automation
   source_url: https://github.com/reniko/ha-blueprints/blob/main/ventilation.yaml
 
@@ -20,40 +18,40 @@ blueprint:
     room_slug:
       name: Room slug (lowercase, no spaces)
     temp_in:
-      selector: { entity: { domain: sensor } }
       name: Indoor temperature sensor
+      selector: { entity: { domain: sensor } }
     temp_out:
-      selector: { entity: { domain: sensor } }
       name: Outdoor temperature sensor
+      selector: { entity: { domain: sensor } }
     dew_in:
-      selector: { entity: { domain: sensor } }
       name: Indoor dew‑point
+      selector: { entity: { domain: sensor } }
     dew_out:
-      selector: { entity: { domain: sensor } }
       name: Outdoor dew‑point
-    enthalpy_in:
       selector: { entity: { domain: sensor } }
+    enthalpy_in:
       name: (Optional) Indoor enthalpy
+      selector: { entity: { domain: sensor } }
       default: ""
     enthalpy_out:
-      selector: { entity: { domain: sensor } }
       name: (Optional) Outdoor enthalpy
+      selector: { entity: { domain: sensor } }
       default: ""
     forecast_high:
-      selector: { entity: { domain: sensor } }
       name: (Optional) Forecast high temperature
+      selector: { entity: { domain: sensor } }
       default: ""
     forecast_low:
-      selector: { entity: { domain: sensor } }
       name: (Optional) Forecast night low temperature
+      selector: { entity: { domain: sensor } }
       default: ""
     window_sensors:
       name: (Optional) Window contact sensors
       selector: { entity: { domain: binary_sensor, device_class: window, multiple: true } }
       default: []
     heating_active:
-      name: Helper / entity that is 'on' when heating is active
-      selector: { entity: { } }
+      name: Helper/entity that is 'on' when heating is active
+      selector: { entity: {} }
     recommendation_boolean:
       name: Input boolean helper to store recommendation
       selector: { entity: { domain: input_boolean } }
@@ -67,20 +65,20 @@ blueprint:
       default: true
     time_start:
       name: Start time for daytime window
-      default: "06:00:00"
       selector: { time: {} }
+      default: "06:00:00"
     time_end:
       name: End time for daytime window
-      default: "22:00:00"
       selector: { time: {} }
+      default: "22:00:00"
     min_temp_diff:
       name: Minimum temperature difference (°C)
-      default: 1
       selector: { number: { min: 0, max: 5, step: 0.5, unit_of_measurement: "°C" } }
+      default: 1
     comfort_max:
       name: Comfort maximum temperature (°C)
-      default: 25
       selector: { number: { min: 18, max: 30, step: 0.5, unit_of_measurement: "°C" } }
+      default: 25
     debug_log:
       name: Write detailed debug to system_log
       selector: { boolean: {} }
@@ -112,31 +110,30 @@ trigger:
 
 variables:
   room: !input room_slug
+  min_tempdiff: "{{ (!input min_temp_diff) | float }}"
+  comfort_max: "{{ (!input comfort_max) | float }}"
 
-  min_tempdiff: "{{ !input min_temp_diff | float }}"
-  comfort_max: "{{ !input comfort_max | float }}"
-
-  temp_in: "{{ states(!input temp_in) | float }}"
-  temp_out: "{{ states(!input temp_out) | float }}"
-  dew_in: "{{ states(!input dew_in) | float }}"
-  dew_out: "{{ states(!input dew_out) | float }}"
+  temp_in: "{{ states('!input temp_in') | float }}"
+  temp_out: "{{ states('!input temp_out') | float }}"
+  dew_in: "{{ states('!input dew_in') | float }}"
+  dew_out: "{{ states('!input dew_out') | float }}"
 
   enth_in: >
-    {% if !input enthalpy_in %}{{ states(!input enthalpy_in) | float }}{% else %}0{% endif %}
+    {% if !input enthalpy_in %}{{ states('!input enthalpy_in') | float }}{% else %}0{% endif %}
   enth_out: >
-    {% if !input enthalpy_out %}{{ states(!input enthalpy_out) | float }}{% else %}0{% endif %}
+    {% if !input enthalpy_out %}{{ states('!input enthalpy_out') | float }}{% else %}0{% endif %}
 
   f_high: >
-    {% if !input forecast_high %}{{ states(!input forecast_high) | float }}{% else %}-99{% endif %}
+    {% if !input forecast_high %}{{ states('!input forecast_high') | float }}{% else %}-99{% endif %}
   f_low: >
-    {% if !input forecast_low %}{{ states(!input forecast_low) | float }}{% else %}99{% endif %}
+    {% if !input forecast_low %}{{ states('!input forecast_low') | float }}{% else %}99{% endif %}
 
-  heating_on: "{{ is_state(!input heating_active, 'on') }}"
+  heating_on: "{{ is_state('!input heating_active', 'on') }}"
   now_time: "{{ now().strftime('%H:%M:%S') }}"
 
   timeframe_ok: >
     {% if !input allow_night %}true{% else %}
-      {{ !input time_start <= now().strftime('%H:%M:%S') < !input time_end }}
+      {{ '!input time_start' <= now().strftime('%H:%M:%S') < '!input time_end' }}
     {% endif %}
 
   temp_ok: "{{ temp_out < (temp_in - min_tempdiff) }}"
@@ -155,8 +152,7 @@ variables:
 
 action:
   - choose:
-      - conditions: >
-          {{ should_ventilate and is_state(!input recommendation_boolean, 'off') }}
+      - conditions: "{{ should_ventilate and is_state('!input recommendation_boolean', 'off') }}"
         sequence:
           - service: input_boolean.turn_on
             target: { entity_id: !input recommendation_boolean }
@@ -166,8 +162,7 @@ action:
                   - service: !input notify_group
                     data:
                       message: "💨 Bitte {{ room }} lüften (Fenster öffnen)."
-      - conditions: >
-          {{ (not should_ventilate) and is_state(!input recommendation_boolean, 'on') }}
+      - conditions: "{{ (not should_ventilate) and is_state('!input recommendation_boolean', 'on') }}"
         sequence:
           - service: input_boolean.turn_off
             target: { entity_id: !input recommendation_boolean }
@@ -186,9 +181,9 @@ action:
               message: |
                 Lüften-Debug {{ room }}:
                   T-OK: {{ temp_ok }} OUT {{ temp_out }} < IN {{ temp_in }} - Δ {{ min_tempdiff }}
-                  D-OK: {{ dew_ok  }} OUT {{ dew_out|round(1) }} < IN {{ dew_in|round(1) }}
+                  D-OK: {{ dew_ok }} OUT {{ dew_out|round(1) }} < IN {{ dew_in|round(1) }}
                   H-OK: {{ enth_ok }} OUT {{ enth_out|round(1) }} < IN {{ enth_in|round(1) }}
                   F-OK: {{ forecast_ok }} Low {{ f_low }} < {{ comfort_max }} ; High {{ f_high }} > IN {{ temp_in }}
-                  TF-OK: {{ timeframe_ok }} {{ !input time_start }}<{{ now_time }}<{{ !input time_end }}
+                  TF-OK: {{ timeframe_ok }} '!input time_start' < {{ now_time }} < '!input time_end'
                   HZ-OK: {{ not heating_on }}  Heizung {{ 'AN' if heating_on else 'AUS' }}
                   ➜ VENTILATE = {{ 'JA' if should_ventilate else 'NEIN' }}
