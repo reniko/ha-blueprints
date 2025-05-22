@@ -1,4 +1,4 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.7.0)
+# Ventilation Recommendation (forecast + hysteresis, v0.7.1)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
@@ -7,7 +7,7 @@
 # - Optional: Time window (disable night ventilation)
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.7.0)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.7.1)
   description: >
     Recommend window ventilation per room based on indoor/outdoor temperature,
     dew point, enthalpy, weather forecast and configurable hysteresis helpers.
@@ -17,57 +17,115 @@ blueprint:
   input:
     room_slug:
       name: Room slug (used in helper/entity ids)
+      selector:
+        text:
     temp_in:
       name: Indoor temperature sensor
+      selector:
+        entity:
+          domain: sensor
     temp_out:
       name: Outdoor temperature sensor
+      selector:
+        entity:
+          domain: sensor
     dew_in:
       name: Indoor dewpoint sensor
+      selector:
+        entity:
+          domain: sensor
     dew_out:
       name: Outdoor dewpoint sensor
+      selector:
+        entity:
+          domain: sensor
     enthalpy_in:
       name: Indoor enthalpy sensor
       default: ''
+      selector:
+        entity:
+          domain: sensor
     enthalpy_out:
       name: Outdoor enthalpy sensor
       default: ''
+      selector:
+        entity:
+          domain: sensor
     forecast_low:
       name: Forecast low next 6 h
       default: ''
+      selector:
+        entity:
+          domain: sensor
     forecast_high:
       name: Forecast high next 12 h
       default: ''
+      selector:
+        entity:
+          domain: sensor
     forecast_high_tomorrow:
       name: Forecast high tomorrow
       default: ''
+      selector:
+        entity:
+          domain: sensor
     min_delta_helper:
-      name: Helper – min ΔT to open
+      name: Helper – min ΔT to open (input_number)
+      selector:
+        entity:
+          domain: input_number
     hysteresis_helper:
-      name: Helper – ΔT to close
+      name: Helper – ΔT to close (input_number)
+      selector:
+        entity:
+          domain: input_number
     comfort_helper:
-      name: Helper – comfort temperature
+      name: Helper – comfort temperature (input_number)
+      selector:
+        entity:
+          domain: input_number
     window_sensors:
       name: Optional window sensors (list)
       default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: window
+          multiple: true
     heating_active:
       name: Heating active helper/entity
+      selector:
+        entity: {}
     recommendation_boolean:
       name: Output helper (input_boolean)
+      selector:
+        entity:
+          domain: input_boolean
     notify_group:
-      name: optional notify group
+      name: optional notify group (service id)
       default: ''
+      selector:
+        text:
     allow_night:
       name: allow night ventilation
       default: true
+      selector:
+        boolean:
     time_start:
       name: Start time (HH:MM:SS)
       default: '06:00:00'
+      selector:
+        time:
     time_end:
       name: End time (HH:MM:SS)
       default: '22:00:00'
+      selector:
+        time:
     debug_log:
       name: Enable debug log
       default: false
+      selector:
+        boolean:
 
 mode: single
 
