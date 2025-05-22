@@ -1,4 +1,4 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.8.1)
+# Ventilation Recommendation (forecast + hysteresis, v0.8.2)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
@@ -11,7 +11,7 @@
 # - Debug‑Log via logbook.log  
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.8.1)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.8.2)
   description: >
     Recommends opening / closing windows for passive cooling per room,
     using temperature & dew‑point deltas with hysteresis, forecast‑based
@@ -183,6 +183,8 @@ variables:
   f_high_tom_ent: !input forecast_high_tomorrow
   heat_ent: !input heating_active
   rec_bool_ent: !input recommendation_boolean
+  notify_group: !input notify_group
+  debug_log: !input debug_log
 
   # sensor values numeric ----------------------------------------------
   temp_in: "{{ states(temp_in_ent)|float }}"
