@@ -1,4 +1,4 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.7.1)
+# Ventilation Recommendation (forecast + hysteresis, v0.7.2)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
@@ -7,7 +7,7 @@
 # - Optional: Time window (disable night ventilation)
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.7.1)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.7.2)
   description: >
     Recommend window ventilation per room based on indoor/outdoor temperature,
     dew point, enthalpy, weather forecast and configurable hysteresis helpers.
@@ -40,31 +40,31 @@ blueprint:
         entity:
           domain: sensor
     enthalpy_in:
-      name: Indoor enthalpy sensor
+      name: Indoor enthalpy sensor (optional)
       default: ''
       selector:
         entity:
           domain: sensor
     enthalpy_out:
-      name: Outdoor enthalpy sensor
+      name: Outdoor enthalpy sensor (optional)
       default: ''
       selector:
         entity:
           domain: sensor
     forecast_low:
-      name: Forecast low next 6 h
+      name: Forecast low next 6 h (optional)
       default: ''
       selector:
         entity:
           domain: sensor
     forecast_high:
-      name: Forecast high next 12 h
+      name: Forecast high next 12 h (optional)
       default: ''
       selector:
         entity:
           domain: sensor
     forecast_high_tomorrow:
-      name: Forecast high tomorrow
+      name: Forecast high tomorrow (optional)
       default: ''
       selector:
         entity:
@@ -143,6 +143,7 @@ variables:
   min_delta_helper_id: !input min_delta_helper
   hyst_helper_id: !input hysteresis_helper
   comfort_helper_id: !input comfort_helper
+  heating_active_entity: !input heating_active
 
   temp_in: "{{ states(temp_in_entity)|float }}"
   temp_out: "{{ states(temp_out_entity)|float }}"
@@ -156,7 +157,7 @@ variables:
   min_delta: "{{ states(min_delta_helper_id)|float(default=2) }}"
   reopen_delta: "{{ states(hyst_helper_id)|float(default=1) }}"
   comfort_val: "{{ states(comfort_helper_id)|float(default=25) }}"
-  heating_on: "{{ is_state(!input heating_active, 'on') }}"
+  heating_on: "{{ is_state(heating_active_entity, 'on') }}"
   allow_night_flag: !input allow_night
   start_time: !input time_start
   end_time: !input time_end
@@ -195,10 +196,10 @@ trigger:
     minutes: '/10'
   - platform: state
     entity_id:
-      - "{{ temp_in_entity }}"
-      - "{{ temp_out_entity }}"
-      - "{{ dew_in_entity }}"
-      - "{{ dew_out_entity }}"
+      - !input temp_in
+      - !input temp_out
+      - !input dew_in
+      - !input dew_out
     for: '00:05:00'
 
 condition: []
@@ -208,7 +209,8 @@ action:
       - conditions: "{{ should_ventilate }}"
         sequence:
           - service: homeassistant.turn_on
-            target: { entity_id: "{{ rec_bool_entity }}" }
+            target:
+              entity_id: "{{ rec_bool_entity }}"
           - choose:
               - conditions: "{{ notify_target and (states(rec_bool_entity) == 'off') }}"
                 sequence:
@@ -218,7 +220,8 @@ action:
       - conditions: "{{ not should_ventilate }}"
         sequence:
           - service: homeassistant.turn_off
-            target: { entity_id: "{{ rec_bool_entity }}" }
+            target:
+              entity_id: "{{ rec_bool_entity }}"
           - choose:
               - conditions: "{{ notify_target and (states(rec_bool_entity) == 'on') }}"
                 sequence:
