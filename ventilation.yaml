@@ -1,17 +1,17 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.8.0)
+# Ventilation Recommendation (forecast + hysteresis, v0.8.1)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
 # - Optional: Enthalpy comparison
 # - Forecast strategy «Overheat‑Bypass»:  
-#   * Wenn Raum überhitzt (Temp_in > comfort + margin) → nur Night‑Low < Temp_in‑1 K nötig  
-#   * Sonst zusätzlich: (Peak12h oder PeakTomorrow) > comfort + 1 K  
-# - Optional time window pro Raum  
-# - Flapping‑Schutz durch Temperatur‑Hysterese & 5‑min state‑delay
+#   * Wenn Raum überhitzt (Temp_in > comfort + margin) → nur Night‑Low < Temp_in‑1 K nötig  
+#   * Sonst zusätzlich: (Peak12h oder PeakTomorrow) > comfort + 1 K  
+# - Optionales Zeitfenster pro Raum  
+# - Flapping‑Schutz durch Temperatur‑Hysterese & 5‑min state‑delay  
 # - Debug‑Log via logbook.log  
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.8.0)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.8.1)
   description: >
     Recommends opening / closing windows for passive cooling per room,
     using temperature & dew‑point deltas with hysteresis, forecast‑based
@@ -25,7 +25,9 @@ blueprint:
     # --- Room & Devices -------------------------------------------------
     room_slug:
       name: Room slug
-      selector: text:
+      selector:
+        text:
+
     temp_in:
       name: Temperature inside
       selector:
@@ -133,32 +135,43 @@ blueprint:
     # --- Time window & flags -------------------------------------------
     allow_night:
       name: Allow night ventilation
-      selector: boolean:
+      default: true
+      selector:
+        boolean:
     time_start:
       name: Earliest ventilation time
       default: "06:00:00"
-      selector: time:
+      selector:
+        time:
     time_end:
       name: Latest ventilation time
       default: "22:00:00"
-      selector: time:
+      selector:
+        time:
     debug_log:
       name: Debug log
       default: false
-      selector: boolean:
+      selector:
+        boolean:
 
 # ======================================================================
 mode: single
 
 variables:
   room: !input room_slug
-  # helpers
-  min_delta: "{{ states(!input min_delta_helper)|float(2) }}"
-  close_delta: "{{ states(!input hysteresis_helper)|float(1) }}"
-  comfort_val: "{{ states(!input comfort_helper)|float(25) }}"
-  over_margin: "{{ states(!input overheat_margin_helper)|float(1) }}"
 
-  # sensors raw ids
+  # helpers -------------------------------------------------------------
+  min_delta_helper_ent: !input min_delta_helper
+  hysteresis_helper_ent: !input hysteresis_helper
+  comfort_helper_ent: !input comfort_helper
+  oh_margin_helper_ent: !input overheat_margin_helper
+
+  min_delta: "{{ states(min_delta_helper_ent)|float(2) }}"
+  close_delta: "{{ states(hysteresis_helper_ent)|float(1) }}"
+  comfort_val: "{{ states(comfort_helper_ent)|float(25) }}"
+  over_margin: "{{ states(oh_margin_helper_ent)|float(1) }}"
+
+  # sensor entity ids ---------------------------------------------------
   temp_in_ent: !input temp_in
   temp_out_ent: !input temp_out
   dew_in_ent: !input dew_in
@@ -171,7 +184,7 @@ variables:
   heat_ent: !input heating_active
   rec_bool_ent: !input recommendation_boolean
 
-  # sensor values numeric ------------------------------------------------
+  # sensor values numeric ----------------------------------------------
   temp_in: "{{ states(temp_in_ent)|float }}"
   temp_out: "{{ states(temp_out_ent)|float }}"
   dew_in: "{{ states(dew_in_ent)|float }}"
@@ -183,14 +196,14 @@ variables:
   f_high_tom: "{{ states(f_high_tom_ent)|float(default=-99) }}"
   heating_on: "{{ is_state(heat_ent, 'on') }}"
 
-  # delta & status -------------------------------------------------------
+  # delta & status ------------------------------------------------------
   delta_t: "{{ temp_in - temp_out }}"
   delta_dew: "{{ dew_in - dew_out }}"
   overheat: "{{ temp_in > comfort_val + over_margin }}"
 
   # --- Forecast OK calculation (Overheat‑Bypass) -----------------------
   forecast_ok: >
-    {% if not f_low_ent %}
+    {% if f_low_ent == '' %}
       true
     {% else %}
       {% set lo_cond = f_low < temp_in - 1 %}
@@ -206,7 +219,9 @@ variables:
   time_start_val: !input time_start
   time_end_val: !input time_end
   timeframe_ok: >
-    {% if allow_night_flag %} true {% else %}
+    {% if allow_night_flag %}
+      true
+    {% else %}
       {% set t = now().strftime('%H:%M:%S') %}
       {{ time_start_val <= t <= time_end_val }}
     {% endif %}
@@ -251,28 +266,30 @@ action:
       - conditions: "{{ should_vent }}"
         sequence:
           - service: homeassistant.turn_on
-            target: { entity_id: "{{ rec_bool_ent }}" }
+            target:
+              entity_id: "{{ rec_bool_ent }}"
           - if:
               - condition: template
                 value_template: "{{ rec_state == 'off' and notify_group != '' }}"
             then:
               - service: "{{ notify_group }}"
                 data:
-                  message: "💨 {{ room }}: Lüften empfohlen – ΔT {{ delta_t|round(1) }} K"
+                  message: "💨 {{ room }}: Lüften empfohlen – ΔT {{ delta_t|round(1) }} K"
       - conditions: "{{ not should_vent }}"
         sequence:
           - service: homeassistant.turn_off
-            target: { entity_id: "{{ rec_bool_ent }}" }
+            target:
+              entity_id: "{{ rec_bool_ent }}"
           - if:
               - condition: template
                 value_template: "{{ rec_state == 'on' and notify_group != '' }}"
             then:
               - service: "{{ notify_group }}"
                 data:
-                  message: "🪟 {{ room }}: Fenster schließen – ΔT {{ delta_t|round(1) }} K"
+                  message: "🪟 {{ room }}: Fenster schließen – ΔT {{ delta_t|round(1) }} K"
 
   # Debug log -----------------------------------------------------------
-  - if: "{{ !input debug_log }}"
+  - if: "{{ not debug_log }}"
     then: []
     else:
       - service: logbook.log
@@ -280,4 +297,6 @@ action:
           name: Ventilation Debug
           entity_id: "{{ rec_bool_ent }}"
           message: >
-            ΔT {{ delta_t|round(1) }} K | Δτ {{ delta_dew|round(1) }} K | overheat={{ overheat }} |\n            temp_ok={{ temp_ok }} dew_ok={{ dew_ok }} enth_ok={{ enth_ok }} forecast_ok={{ forecast_ok }} |\n            timeframe_ok={{ timeframe_ok }} | result={{ should_vent }}
+            ΔT {{ delta_t|round(1) }} K | Δτ {{ delta_dew|round(1) }} K | overheat={{ overheat }} |
+            temp_ok={{ temp_ok }} dew_ok={{ dew_ok }} enth_ok={{ enth_ok }} forecast_ok={{ forecast_ok }} |
+            timeframe_ok={{ timeframe_ok }} | result={{ should_vent }}
