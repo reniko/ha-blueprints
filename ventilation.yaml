@@ -1,17 +1,18 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.8.2)
+# Ventilation Recommendation (forecast + hysteresis, v0.8.3)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
 # - Optional: Enthalpy comparison
 # - Forecast strategy «Overheat‑Bypass»:  
-#   * Wenn Raum überhitzt (Temp_in > comfort + margin) → nur Night‑Low < Temp_in‑1 K nötig  
-#   * Sonst zusätzlich: (Peak12h oder PeakTomorrow) > comfort + 1 K  
+#   * Wenn Raum überhitzt (Temp_in > comfort + margin) → nur Night‑Low < Temp_in‑1 K nötig  
+#   * Sonst zusätzlich: (Peak12h oder PeakTomorrow) > comfort + 1 K  
 # - Optionales Zeitfenster pro Raum  
 # - Flapping‑Schutz durch Temperatur‑Hysterese & 5‑min state‑delay  
 # - Debug‑Log via logbook.log  
+# - v0.8.3: Added notification_id to prevent stacking notifications
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.8.2)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.8.3)
   description: >
     Recommends opening / closing windows for passive cooling per room,
     using temperature & dew‑point deltas with hysteresis, forecast‑based
@@ -276,7 +277,9 @@ action:
             then:
               - service: "{{ notify_group }}"
                 data:
-                  message: "💨 {{ room }}: Lüften empfohlen – ΔT {{ delta_t|round(1) }} K"
+                  message: "💨 {{ room }}: Lüften empfohlen – ΔT {{ delta_t|round(1) }} K"
+                  data:
+                    notification_id: "ventilation_{{ room }}"
       - conditions: "{{ not should_vent }}"
         sequence:
           - service: homeassistant.turn_off
@@ -288,7 +291,9 @@ action:
             then:
               - service: "{{ notify_group }}"
                 data:
-                  message: "🪟 {{ room }}: Fenster schließen – ΔT {{ delta_t|round(1) }} K"
+                  message: "🪟 {{ room }}: Fenster schließen – ΔT {{ delta_t|round(1) }} K"
+                  data:
+                    notification_id: "ventilation_{{ room }}"
 
   # Debug log -----------------------------------------------------------
   - if: "{{ not debug_log }}"
@@ -299,6 +304,6 @@ action:
           name: Ventilation Debug
           entity_id: "{{ rec_bool_ent }}"
           message: >
-            ΔT {{ delta_t|round(1) }} K | Δτ {{ delta_dew|round(1) }} K | overheat={{ overheat }} |
+            ΔT {{ delta_t|round(1) }} K | Δτ {{ delta_dew|round(1) }} K | overheat={{ overheat }} |
             temp_ok={{ temp_ok }} dew_ok={{ dew_ok }} enth_ok={{ enth_ok }} forecast_ok={{ forecast_ok }} |
             timeframe_ok={{ timeframe_ok }} | result={{ should_vent }}
