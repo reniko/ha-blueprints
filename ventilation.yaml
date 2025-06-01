@@ -11,7 +11,7 @@
 # - Debug‑Log via logbook.log
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.8.4)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.8.5)
   description: >
     Recommends opening / closing windows for passive cooling per room,
     using temperature & dew‑point deltas with hysteresis, forecast‑based
@@ -293,7 +293,7 @@ action:
                 data:
                   message: "🪟 {{ room }}: Fenster schließen – ΔT {{ delta_t|round(1) }} K"
                   data:
-                    tag: "ventilation_{{ room }}
+                    tag: "ventilation_{{ room }}"
                     channel: ventilation
 
   # Debug log -----------------------------------------------------------
