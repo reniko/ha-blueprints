@@ -57,7 +57,7 @@ Strategy for climate control:
 	|	|
 	|	Cond 2 - Sub 2: inside >= preemtive heating (18)
 	|	|	   	inside <= preemtive cooling (28)
-	|	|	-> optimal range reached, but check if preemtive useful because of forecase
+	|	|	-> optimal range reached, but check if preemtive useful because of forecast
 	|	|	|
 	|	|	Cond 2 - Sub 2 - Sub 0: forecast max >= preemtive cooling (28)
 	|	|	|	-> cooling?
