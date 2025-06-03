@@ -145,7 +145,6 @@ blueprint:
           min: 0
           max: 40
           unit_of_measurement: °C
-
     change_frequency:
       name: Delay in minutes after an adjustment until a new adjustment is done
       description: Minutes will be added to the actual time. Next adjustment will be done after this amount of minutes.
@@ -155,16 +154,15 @@ blueprint:
           min: 0
           max: 120
           unit_of_measurement: min
-
-#heating_threshold 10
-#preemptive_heating_threshold 18
-#heating_temperature 20
-#preemptive_heating_stop_threshold 26
-
-#preemptive_cooling_stop_threshold 20
-#cooling_temperature 26
-#preemptive_cooling_threshold 28
-#cooling_threshold 30
+    ventilation_difference:
+      name: temperature difference (outside, inside) for ventilation
+      description: The temperature difference which must be between inside and outside temperature to start ventialation.
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 10
+          unit_of_measurement: K
 
 variables:
   inside_temperature_sensor: !input inside_temperature_sensor
@@ -184,6 +182,7 @@ variables:
   heating_threshold: !input heating_threshold
   datetime_helper: !input datetime_helper
   change_frequency: !input change_frequency
+  ventilation_difference: !ventilation_difference
 
 trigger:
   - platform: homeassistant
@@ -293,12 +292,12 @@ action:
                     value_template: "{{ (states(inside_temperature_sensor)|float(18)) < preemptive_heating_threshold }}"
                 sequence:
                   - choose:
-                      # Sub-sub-condition 0: Preemptive heating with fan if outside temperature is higher than preemptive heating threshold
+                      # Sub-sub-condition 0: Preemptive heating with fan if outside temperature is higher than preemptive heating threshold and temperature difference between outside and inside is high enough
                       - conditions:
                           - condition: template
                             value_template: "{{ (states(outside_temperature_sensor)|float(18)) > preemptive_heating_threshold }}"                  
                           - condition: template
-                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) > (states(inside_temperature_sensor)|float(18)) }}"
+                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) > ( (states(inside_temperature_sensor)|float(18)) + (states(ventilation_difference)|float(2)) ) }}"
                         sequence:
                           - action: climate.set_hvac_mode
                             target:
@@ -333,10 +332,10 @@ action:
                               name: "Climate Control"
                               message: "Inside: lower than preemptive heating ({{(states(inside_temperature_sensor))}}). Surplus: available ({{(states(pv_surplus_sensor))}}) -> Mode: heat."
                               entity_id: !input climate_entity
-                      # Sub-sub-condition 2: Preemptive heating with fan but without surplus and high outside temperature (better than nothing)
+                      # Sub-sub-condition 2: Preemptive heating with fan but without surplus and higher outside temperature than inside (+ temperature difference) --> better than nothing
                       - conditions:
                           - condition: template
-                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) > (states(inside_temperature_sensor)|float(18)) }}"
+                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) > ( (states(inside_temperature_sensor)|float(18)) + (states(ventilation_difference)|float(2)) ) }}"
                         sequence:
                           - action: climate.set_hvac_mode
                             target:
@@ -367,12 +366,12 @@ action:
                     value_template: "{{ (states(inside_temperature_sensor)|float(18)) > preemptive_cooling_threshold }}"
                 sequence:
                   - choose:
-                      # Sub-sub-condition 0: Preemptive cooling with fan if outside temperature is lower than preemptive cooling threshold
+                      # Sub-sub-condition 0: Preemptive cooling with fan if outside temperature is lower than preemptive cooling threshold and temperature difference between outside and inside is high enough
                       - conditions:
                           - condition: template
                             value_template: "{{ (states(outside_temperature_sensor)|float(18)) < preemptive_cooling_threshold }}"                  
                           - condition: template
-                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) < (states(inside_temperature_sensor)|float(18)) }}"
+                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) < ( (states(inside_temperature_sensor)|float(18)) - (states(ventilation_difference)|float(2)) ) }}"
                         sequence:
                           - action: climate.set_hvac_mode
                             target:
@@ -407,10 +406,10 @@ action:
                               name: "Climate Control"
                               message: "Inside: higher than preemptive cooling ({{(states(inside_temperature_sensor))}}). Surplus: available ({{(states(pv_surplus_sensor))}}) -> Mode: cool."
                               entity_id: !input climate_entity
-                      # Sub-sub-condition 2: Preemptive cooling with fan but without surplus and low outside temperature (better than nothing)
+                      # Sub-sub-condition 2: Preemptive cooling with fan but without surplus and lower outside temperature than inside (- temperature difference) --> better than nothing
                       - conditions:
                           - condition: template
-                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) < (states(inside_temperature_sensor)|float(18)) }}"
+                            value_template: "{{ (states(outside_temperature_sensor)|float(18)) < ( (states(inside_temperature_sensor)|float(18)) - (states(ventilation_difference)|float(2)) ) }}"
                         sequence:
                           - action: climate.set_hvac_mode
                             target:
