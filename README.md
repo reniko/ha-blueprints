@@ -26,14 +26,14 @@ Strategy for climate control:
 	|	|	-> heating?
 	|	|	|
 	|	|	Cond 2 - Sub 0 - Sub 0: outside > preemtive heat (18)
-	|	|	|	  		outside > inside
+	|	|	|	  		outside > inside + ventilation difference (2)
 	|	|	|	-> fan
 	|	|	|
 	|	|	Cond 2 - Sub 0 - Sub 1: surplus >= minimum surplus heating (500)
 	|	|	|	  		surplus remaining > (minimum surplus heating (500) * change frequency (15)) / 60
 	|	|	|	-> heat 
 	|	|	|
-	|	|	Cond 2 - Sub 0 - Sub 2: outside > inside
+	|	|	Cond 2 - Sub 0 - Sub 2: outside > inside + ventilation difference (2)
 	|	|	|	-> fan
 	|	|	|
 	|	|	Cond 2 - Sub 0 - Default:
@@ -42,14 +42,14 @@ Strategy for climate control:
 	|	|	-> cooling?
 	|	|	|
 	|	|	Cond 2 - Sub 1 - Sub 0: outside < preemtive cool (28)
-	|	|	|	  		outside < inside
+	|	|	|	  		outside < inside - ventilation difference (2)
 	|	|	|	-> fan
 	|	|	|
 	|	|	Cond 2 - Sub 1 - Sub 1: surplus >= minimum surplus cooling (500)
 	|	|	|	  		surplus remaining > (minimum surplus cooling (500) * change frequency (15)) / 60
 	|	|	|	-> cool
 	|	|	|
-	|	|	Cond 2 - Sub 1 - Sub 2: outside < inside
+	|	|	Cond 2 - Sub 1 - Sub 2: outside < inside - ventilation difference (2)
 	|	|	|	-> fan
 	|	|	|
 	|	|	Cond 2 - Sub 1 - Default:
