@@ -257,13 +257,10 @@ blueprint:
     notify_entity:
       name: Notify target (optional)
       description: >
-        A notify.* entity (e.g. notify.mobile_app_phone). If set, sends a push message when mode changes.
+        Optional notify group. If set, sends a push message when mode changes.
       default: []
       selector:
-        entity:
-          filter:
-            - domain: notify
-          multiple: true
+        text
 
     persistent_notification_id:
       name: Persistent notification_id
