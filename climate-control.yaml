@@ -1,5 +1,5 @@
 blueprint:
-  name: Climate Control (Climate + Heater + Vent) with PV/Forecast, Logging & Push
+  name: Climate Control (Climate + Heater + Vent) with PV/Forecast, Logging & Push (v 2.1)
   description: >
     Controls a climate entity and/or an external heater (switch/plug) based on inside/outside temperatures,
     prioritizes PV energy usage, optionally uses forecast to pre-heat/pre-cool, and prefers ventilation (fan-only)
