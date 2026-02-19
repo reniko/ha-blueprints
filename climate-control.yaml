@@ -827,6 +827,7 @@ actions:
 
         PV surplus: {{ pv_surplus_w }} W
         PV remaining today: {{ pv_remaining_kwh }} kWh
+        Evcc enabled: {{ pv_enable_on }}
 
   # --- Optional: store mode in helper (input_text) ---
   - choose:
