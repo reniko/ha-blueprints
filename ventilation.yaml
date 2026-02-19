@@ -1,4 +1,4 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.8.3)
+# Ventilation Recommendation (forecast + hysteresis, v0.8.6)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
@@ -11,7 +11,7 @@
 # - Debug‑Log via logbook.log
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.8.5)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.8.6)
   description: >
     Recommends opening / closing windows for passive cooling per room,
     using temperature & dew‑point deltas with hysteresis, forecast‑based
@@ -155,7 +155,7 @@ blueprint:
         boolean:
 
 # ======================================================================
-mode: single
+mode: restart
 
 variables:
   room: !input room_slug
