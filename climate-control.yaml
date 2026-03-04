@@ -1,12 +1,13 @@
 blueprint:
-  name: Climate Control (Climate + Heater + Vent) with PV/Forecast, Logging & Push (v 2.2)
+  name: Climate Control (Climate + Heater + Vent) with PV/Forecast, Logging & Push (v 2.3)
   description: >
     Controls a climate entity and/or an external heater (switch/plug) based on inside/outside temperatures,
     prioritizes PV energy usage, optionally uses forecast to pre-heat/pre-cool, and prefers ventilation (fan-only)
     when outside conditions are favorable.
-
-    Adds:
-      - EVCC PV surplus option
+    Adds: EVCC PV surplus option.
+    Fixes in v2.3:
+      - avoid choose-as-if/elif for multi-actuator setups (HEAT/COOL/VENT/OFF)
+      - reliable previous_mode detection for push notify
 
   domain: automation
 
@@ -40,7 +41,8 @@ blueprint:
     vent_switch:
       name: Ventilation Switch (optional)
       description: >
-        Optional separate ventilation switch (e.g., extractor fan). If not set, ventilation uses climate fan_only.
+        Optional separate ventilation switch (e.g., extractor fan).
+        If not set, ventilation uses climate fan_only.
       default: []
       selector:
         entity:
@@ -84,16 +86,13 @@ blueprint:
       name: EVCC PV surplus enable (input_boolean/switch) (optional)
       description: >
         If set, PV-based preemptive heating/cooling and forecast+PV actions are ONLY allowed when this entity is ON.
-
         Intended for evcc surplus control.
 
-        IMPORTANT:
-        When this entity is configured, these parameters are ignored:
-        - minimum_pv_surplus_for_preemptive_heating
-        - minimum_pv_surplus_for_preemptive_cooling
+        IMPORTANT: When this entity is configured, these parameters are ignored:
+          - minimum_pv_surplus_for_preemptive_heating
+          - minimum_pv_surplus_for_preemptive_cooling
 
         The remaining surplus sensor (kWh) is still used as safety limit.
-
         If empty, the blueprint falls back to pv_surplus_sensor thresholds (legacy behavior).
       default: null
       selector:
@@ -107,9 +106,7 @@ blueprint:
       name: PV current available Surplus Sensor (W) (optional)
       description: >
         Sensor showing current available PV energy surplus (W). Leave empty if unused.
-
-        NOTE:
-        Ignored if EVCC PV surplus enable is configured.
+        NOTE: Ignored if EVCC PV surplus enable is configured.
       default: []
       selector:
         entity:
@@ -122,9 +119,7 @@ blueprint:
       name: PV Remaining Surplus Sensor (kWh) (optional)
       description: >
         Sensor showing remaining PV energy surplus for today (kWh). Leave empty if unused.
-
-        NOTE:
-        Ignored if EVCC PV surplus enable is configured.
+        NOTE: Ignored if EVCC PV surplus enable is configured.
       default: []
       selector:
         entity:
@@ -163,7 +158,7 @@ blueprint:
         number:
           min: 0
           max: 40
-          unit_of_measurement: °C
+          unit_of_measurement: "°C"
           mode: slider
 
     cooling_threshold:
@@ -174,7 +169,7 @@ blueprint:
         number:
           min: 0
           max: 40
-          unit_of_measurement: °C
+          unit_of_measurement: "°C"
           mode: slider
 
     heating_temperature:
@@ -185,7 +180,7 @@ blueprint:
         number:
           min: 0
           max: 40
-          unit_of_measurement: °C
+          unit_of_measurement: "°C"
           mode: slider
 
     cooling_temperature:
@@ -196,7 +191,7 @@ blueprint:
         number:
           min: 0
           max: 40
-          unit_of_measurement: °C
+          unit_of_measurement: "°C"
           mode: slider
 
     # --- Proactive (PV/Forecast) thresholds ---
@@ -208,7 +203,7 @@ blueprint:
         number:
           min: 0
           max: 40
-          unit_of_measurement: °C
+          unit_of_measurement: "°C"
           mode: slider
 
     preemptive_heating_stop_threshold:
@@ -219,7 +214,7 @@ blueprint:
         number:
           min: 0
           max: 40
-          unit_of_measurement: °C
+          unit_of_measurement: "°C"
           mode: slider
 
     preemptive_cooling_threshold:
@@ -230,7 +225,7 @@ blueprint:
         number:
           min: 0
           max: 40
-          unit_of_measurement: °C
+          unit_of_measurement: "°C"
           mode: slider
 
     preemptive_cooling_stop_threshold:
@@ -241,20 +236,20 @@ blueprint:
         number:
           min: 0
           max: 40
-          unit_of_measurement: °C
+          unit_of_measurement: "°C"
           mode: slider
 
     ventilation_difference:
       name: Temperature difference (outside vs inside) for ventilation (K)
       description: >
-        Outside must be at least this much warmer (for free heating) or cooler (for free cooling) than inside
-        before ventilation is started.
+        Outside must be at least this much warmer (for free heating) or cooler (for free cooling)
+        than inside before ventilation is started.
       default: 2
       selector:
         number:
           min: 0
           max: 10
-          unit_of_measurement: K
+          unit_of_measurement: "K"
           mode: slider
 
     # --- PV criteria ---
@@ -262,30 +257,26 @@ blueprint:
       name: Minimum PV Surplus for preemptive cooling (W)
       description: >
         Minimum PV surplus required to use PV energy for cooling.
-
-        NOTE:
-        Ignored if EVCC PV surplus enable is configured.
+        NOTE: Ignored if EVCC PV surplus enable is configured.
       default: 500
       selector:
         number:
           min: 100
           max: 5000
-          unit_of_measurement: W
+          unit_of_measurement: "W"
           mode: slider
 
     minimum_pv_surplus_for_preemptive_heating:
       name: Minimum PV Surplus for preemptive heating (W)
       description: >
         Minimum PV surplus required to use PV energy for heating.
-
-        NOTE:
-        Ignored if EVCC PV surplus enable is configured.
+        NOTE: Ignored if EVCC PV surplus enable is configured.
       default: 500
       selector:
         number:
           min: 100
           max: 5000
-          unit_of_measurement: W
+          unit_of_measurement: "W"
           mode: slider
 
     # --- Notifications / Logging ---
@@ -295,21 +286,21 @@ blueprint:
         Optional notify group. If set, sends a push message when mode changes.
       default: []
       selector:
-        text:
+        text: {}
 
     persistent_notification_id:
       name: Persistent notification_id
       description: Notification id to keep the "current mode" notification updated (single card).
       default: climate_control_mode
       selector:
-        text:
+        text: {}
 
     log_name:
       name: Logbook name
       description: Name used for logbook.log entries.
       default: Climate Control
       selector:
-        text:
+        text: {}
 
     mode_helper:
       name: Optional helper to store current mode (input_text)
@@ -332,29 +323,22 @@ variables:
   pv_surplus_enable_boolean: !input pv_surplus_enable_boolean
   pv_surplus_sensor: !input pv_surplus_sensor
   pv_remaining_surplus_sensor: !input pv_remaining_surplus_sensor
-
   climate_entity: !input climate_entity
   heater_switch: !input heater_switch
   vent_switch: !input vent_switch
-
   datetime_helper: !input datetime_helper
   change_frequency: !input change_frequency
-
   heating_threshold: !input heating_threshold
   cooling_threshold: !input cooling_threshold
   heating_temperature: !input heating_temperature
   cooling_temperature: !input cooling_temperature
-
   preemptive_heating_threshold: !input preemptive_heating_threshold
   preemptive_heating_stop_threshold: !input preemptive_heating_stop_threshold
   preemptive_cooling_threshold: !input preemptive_cooling_threshold
   preemptive_cooling_stop_threshold: !input preemptive_cooling_stop_threshold
-
   ventilation_difference: !input ventilation_difference
-
   minimum_pv_surplus_for_preemptive_cooling: !input minimum_pv_surplus_for_preemptive_cooling
   minimum_pv_surplus_for_preemptive_heating: !input minimum_pv_surplus_for_preemptive_heating
-
   notify_entity: !input notify_entity
   persistent_notification_id: !input persistent_notification_id
   log_name: !input log_name
@@ -378,29 +362,6 @@ variables:
       {{ 0 }}
     {% endif %}
 
-  pv_enable_on: >-
-    {% if pv_surplus_enable_boolean %}
-      {{ is_state(pv_surplus_enable_boolean, 'on') }}
-    {% else %}
-      {{ none }}
-    {% endif %}
-
-  pv_ok_heat: >-
-    {% if pv_surplus_enable_boolean %}
-      {{ is_state(pv_surplus_enable_boolean, 'on') }}
-    {% else %}
-      {{ (pv_surplus_w >= minimum_pv_surplus_for_preemptive_heating)
-         and (pv_remaining_wh > pv_needed_wh_for_window) }}
-    {% endif %}
-  
-  pv_ok_cool: >-
-    {% if pv_surplus_enable_boolean %}
-      {{ is_state(pv_surplus_enable_boolean, 'on') }}
-    {% else %}
-      {{ (pv_surplus_w >= minimum_pv_surplus_for_preemptive_cooling)
-         and (pv_remaining_wh > pv_needed_wh_for_window_cool) }}
-    {% endif %}
-
   pv_remaining_kwh: >-
     {% if pv_remaining_surplus_sensor is sequence and pv_remaining_surplus_sensor|length > 0 %}
       {{ states(pv_remaining_surplus_sensor[0]) | float(default=0) }}
@@ -412,6 +373,27 @@ variables:
   pv_needed_wh_for_window: "{{ (minimum_pv_surplus_for_preemptive_heating | float(0)) * (change_frequency | float(0)) / 60 }}"
   pv_needed_wh_for_window_cool: "{{ (minimum_pv_surplus_for_preemptive_cooling | float(0)) * (change_frequency | float(0)) / 60 }}"
 
+  pv_enable_on: >-
+    {% if pv_surplus_enable_boolean %}
+      {{ is_state(pv_surplus_enable_boolean, 'on') }}
+    {% else %}
+      {{ none }}
+    {% endif %}
+
+  pv_ok_heat: >-
+    {% if pv_surplus_enable_boolean %}
+      {{ is_state(pv_surplus_enable_boolean, 'on') }}
+    {% else %}
+      {{ (pv_surplus_w >= minimum_pv_surplus_for_preemptive_heating) and (pv_remaining_wh > pv_needed_wh_for_window) }}
+    {% endif %}
+
+  pv_ok_cool: >-
+    {% if pv_surplus_enable_boolean %}
+      {{ is_state(pv_surplus_enable_boolean, 'on') }}
+    {% else %}
+      {{ (pv_surplus_w >= minimum_pv_surplus_for_preemptive_cooling) and (pv_remaining_wh > pv_needed_wh_for_window_cool) }}
+    {% endif %}
+
   has_climate: "{{ climate_entity is sequence and climate_entity|length > 0 }}"
   has_heater: "{{ heater_switch is sequence and heater_switch|length > 0 }}"
   has_vent_switch: "{{ vent_switch is sequence and vent_switch|length > 0 }}"
@@ -422,24 +404,31 @@ variables:
   desired_mode: "OFF"
   decision_reason: "Init"
 
-triggers:
-  - trigger: homeassistant
+trigger:
+  - platform: homeassistant
     event: start
     id: ha_start
-
-  - trigger: event
+  - platform: event
     event_type: automation_reloaded
     id: reload
-
-  - trigger: time
+  - platform: time
     at: !input datetime_helper
     id: scheduled
 
-conditions:
+condition:
   - condition: time
     after: !input datetime_helper
 
-actions:
+action:
+  # Read previous mode BEFORE we possibly overwrite the helper later
+  - variables:
+      previous_mode: >-
+        {% if has_mode_helper %}
+          {{ states(mode_helper[0]) }}
+        {% else %}
+          unknown
+        {% endif %}
+
   # --- Decide the desired mode (HEAT / COOL / VENT / OFF) with a reason string ---
   - choose:
       # Condition 0: Inside temperature is below the heating threshold -> HEAT or VENT
@@ -448,7 +437,7 @@ actions:
             value_template: "{{ inside_temp <= heating_threshold }}"
         sequence:
           - choose:
-              # Sub-condition: Prefer ventilation if outside is warm enough (free heating via ventilation)
+              # Prefer ventilation if outside is warm enough (free heating via ventilation)
               - conditions:
                   - condition: template
                     value_template: "{{ outside_temp >= preemptive_heating_threshold }}"
@@ -470,7 +459,7 @@ actions:
             value_template: "{{ inside_temp >= cooling_threshold }}"
         sequence:
           - choose:
-              # Sub-condition: Prefer ventilation if outside is cool enough (free cooling via ventilation)
+              # Prefer ventilation if outside is cool enough (free cooling via ventilation)
               - conditions:
                   - condition: template
                     value_template: "{{ outside_temp <= preemptive_cooling_threshold }}"
@@ -508,7 +497,8 @@ actions:
                               decision_reason: >-
                                 Inside < preemptive_heating_threshold ({{ inside_temp }} < {{ preemptive_heating_threshold }}),
                                 outside > inside + diff ({{ outside_temp }} > {{ inside_temp }} + {{ ventilation_difference }}) -> VENT (better than nothing)
-                      # (B) Preemptive heating if enough PV surplus available (and enough remaining today)
+
+                      # (B) Preemptive heating if enough PV surplus available
                       - conditions:
                           - condition: template
                             value_template: "{{ pv_ok_heat }}"
@@ -517,8 +507,7 @@ actions:
                               desired_mode: "HEAT"
                               decision_reason: >-
                                 Inside < preemptive_heating_threshold ({{ inside_temp }} < {{ preemptive_heating_threshold }}),
-                                PV surplus available ({{ pv_surplus_w }}W >= {{ minimum_pv_surplus_for_preemptive_heating }}W),
-                                PV remaining ok ({{ pv_remaining_wh }}Wh > {{ pv_needed_wh_for_window }}Wh) -> HEAT (PV)
+                                PV ok (surplus={{ pv_surplus_w }}W, remaining={{ pv_remaining_wh }}Wh) -> HEAT (PV)
                     default:
                       - variables:
                           desired_mode: "OFF"
@@ -542,7 +531,8 @@ actions:
                               decision_reason: >-
                                 Inside > preemptive_cooling_threshold ({{ inside_temp }} > {{ preemptive_cooling_threshold }}),
                                 outside < inside - diff ({{ outside_temp }} < {{ inside_temp }} - {{ ventilation_difference }}) -> VENT (free cooling)
-                      # (B) Preemptive cooling if enough PV surplus available (and enough remaining today)
+
+                      # (B) Preemptive cooling if enough PV surplus available
                       - conditions:
                           - condition: template
                             value_template: "{{ pv_ok_cool }}"
@@ -551,8 +541,7 @@ actions:
                               desired_mode: "COOL"
                               decision_reason: >-
                                 Inside > preemptive_cooling_threshold ({{ inside_temp }} > {{ preemptive_cooling_threshold }}),
-                                PV surplus available ({{ pv_surplus_w }}W >= {{ minimum_pv_surplus_for_preemptive_cooling }}W),
-                                PV remaining ok ({{ pv_remaining_wh }}Wh > {{ pv_needed_wh_for_window_cool }}Wh) -> COOL (PV)
+                                PV ok (surplus={{ pv_surplus_w }}W, remaining={{ pv_remaining_wh }}Wh) -> COOL (PV)
                     default:
                       - variables:
                           desired_mode: "OFF"
@@ -560,7 +549,7 @@ actions:
                             Inside > preemptive_cooling_threshold ({{ inside_temp }} > {{ preemptive_cooling_threshold }}),
                             no useful ventilation/PV cooling -> OFF
 
-              # Sub-condition 2.2: Inside in the "neutral zone" -> use forecast + PV to pre-heat / pre-cool
+              # Sub-condition 2.2: Neutral zone -> use forecast + PV
               - conditions:
                   - condition: template
                     value_template: "{{ inside_temp >= preemptive_heating_threshold and inside_temp <= preemptive_cooling_threshold }}"
@@ -614,31 +603,14 @@ actions:
       effective_mode: >-
         {% set m = desired_mode %}
         {% if m == 'HEAT' %}
-          {% if has_heater %}
-            HEAT
-          {% elif has_climate %}
-            HEAT
-          {% else %}
-            OFF
-          {% endif %}
+          {% if has_heater or has_climate %} HEAT {% else %} OFF {% endif %}
         {% elif m == 'COOL' %}
-          {% if has_climate %}
-            COOL
-          {% elif has_climate == false and (has_vent_switch or has_climate) %}
-            VENT
-          {% else %}
-            OFF
-          {% endif %}
+          {% if has_climate %} COOL {% elif has_vent_switch %} VENT {% else %} OFF {% endif %}
         {% elif m == 'VENT' %}
-          {% if has_vent_switch or has_climate %}
-            VENT
-          {% else %}
-            OFF
-          {% endif %}
+          {% if has_climate or has_vent_switch %} VENT {% else %} OFF {% endif %}
         {% else %}
           OFF
         {% endif %}
-
       effective_reason: >-
         {% if effective_mode != desired_mode %}
           {{ decision_reason }} | Fallback: desired={{ desired_mode }} -> effective={{ effective_mode }} (missing capability)
@@ -647,11 +619,12 @@ actions:
         {% endif %}
 
   - choose:
+      # === HEAT ===
       - conditions:
           - condition: template
             value_template: "{{ effective_mode == 'HEAT' }}"
         sequence:
-          # Always stop cooling/vent first
+          # Stop cooling/vent first (run ALL relevant stop steps)
           - choose:
               - conditions:
                   - condition: template
@@ -662,6 +635,8 @@ actions:
                       entity_id: "{{ climate_entity }}"
                     data:
                       hvac_mode: "off"
+            default: []
+          - choose:
               - conditions:
                   - condition: template
                     value_template: "{{ has_vent_switch }}"
@@ -670,6 +645,7 @@ actions:
                     target:
                       entity_id: "{{ vent_switch }}"
             default: []
+
           # Heat via heater switch if present; else climate heat
           - choose:
               - conditions:
@@ -696,11 +672,12 @@ actions:
                       fan_mode: "auto"
             default: []
 
+      # === COOL ===
       - conditions:
           - condition: template
             value_template: "{{ effective_mode == 'COOL' }}"
         sequence:
-          # Stop heater and vent first
+          # Stop heater and vent first (run ALL relevant stop steps)
           - choose:
               - conditions:
                   - condition: template
@@ -709,6 +686,8 @@ actions:
                   - action: switch.turn_off
                     target:
                       entity_id: "{{ heater_switch }}"
+            default: []
+          - choose:
               - conditions:
                   - condition: template
                     value_template: "{{ has_vent_switch }}"
@@ -717,6 +696,7 @@ actions:
                     target:
                       entity_id: "{{ vent_switch }}"
             default: []
+
           # Cool via climate
           - choose:
               - conditions:
@@ -736,11 +716,12 @@ actions:
                       fan_mode: "auto"
             default: []
 
+      # === VENT ===
       - conditions:
           - condition: template
             value_template: "{{ effective_mode == 'VENT' }}"
         sequence:
-          # Stop heater/cool first
+          # Stop heater first (and then apply venting on all available actuators)
           - choose:
               - conditions:
                   - condition: template
@@ -749,6 +730,10 @@ actions:
                   - action: switch.turn_off
                     target:
                       entity_id: "{{ heater_switch }}"
+            default: []
+
+          # Use climate fan_only if available
+          - choose:
               - conditions:
                   - condition: template
                     value_template: "{{ has_climate }}"
@@ -758,6 +743,10 @@ actions:
                       entity_id: "{{ climate_entity }}"
                     data:
                       hvac_mode: "fan_only"
+            default: []
+
+          # Additionally, turn on ventilation switch if available
+          - choose:
               - conditions:
                   - condition: template
                     value_template: "{{ has_vent_switch }}"
@@ -766,8 +755,10 @@ actions:
                     target:
                       entity_id: "{{ vent_switch }}"
             default: []
+
+    # === OFF (default) ===
     default:
-      # OFF: everything off
+      # Turn everything off (run ALL relevant stop steps)
       - choose:
           - conditions:
               - condition: template
@@ -776,6 +767,8 @@ actions:
               - action: switch.turn_off
                 target:
                   entity_id: "{{ heater_switch }}"
+        default: []
+      - choose:
           - conditions:
               - condition: template
                 value_template: "{{ has_vent_switch }}"
@@ -783,6 +776,8 @@ actions:
               - action: switch.turn_off
                 target:
                   entity_id: "{{ vent_switch }}"
+        default: []
+      - choose:
           - conditions:
               - condition: template
                 value_template: "{{ has_climate }}"
@@ -803,14 +798,10 @@ actions:
         | inside={{ inside_temp }}°C outside={{ outside_temp }}°C forecast_max={{ forecast_max_temp }}°C
         | pv_surplus={{ pv_surplus_w }}W pv_remaining={{ pv_remaining_kwh }}kWh pv_enable={{ pv_enable_on }}
       entity_id: >-
-        {% if has_climate %}
-          {{ climate_entity[0] }}
-        {% elif has_heater %}
-          {{ heater_switch[0] }}
-        {% elif has_vent_switch %}
-          {{ vent_switch[0] }}
-        {% else %}
-          {{ inside_temperature_sensor }}
+        {% if has_climate %} {{ climate_entity[0] }}
+        {% elif has_heater %} {{ heater_switch[0] }}
+        {% elif has_vent_switch %} {{ vent_switch[0] }}
+        {% else %} {{ inside_temperature_sensor }}
         {% endif %}
 
   # --- Update persistent notification (current mode) ---
@@ -820,11 +811,9 @@ actions:
       title: "{{ log_name }}: {{ effective_mode }}"
       message: >-
         {{ effective_reason }}
-
         Inside: {{ inside_temp }}°C
         Outside: {{ outside_temp }}°C
         Forecast max: {{ forecast_max_temp }}°C
-
         PV surplus: {{ pv_surplus_w }} W
         PV remaining today: {{ pv_remaining_kwh }} kWh
         Evcc enabled: {{ pv_enable_on }}
@@ -843,14 +832,6 @@ actions:
     default: []
 
   # --- Optional: push notify on mode change (best-effort) ---
-  # We only push if notify entity is set AND the helper exists AND mode changed.
-  - variables:
-      previous_mode: >-
-        {% if has_mode_helper %}
-          {{ states(mode_helper[0]) }}
-        {% else %}
-          unknown
-        {% endif %}
   - choose:
       - conditions:
           - condition: template
@@ -862,6 +843,7 @@ actions:
               title: "{{ log_name }}: {{ effective_mode }}"
               message: >-
                 {{ effective_reason }}
+                (Prev={{ previous_mode }})
                 (Inside {{ inside_temp }}°C / Outside {{ outside_temp }}°C / PV {{ pv_surplus_w }}W)
     default: []
 
