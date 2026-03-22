@@ -447,6 +447,10 @@ action:
       - conditions:
           - condition: trigger
             id: end
+          - condition: template
+            value_template: >-
+              {% set dict_var = states(appliance_helper) | from_json %}
+              {{ dict_var.start_time is not none }}
         sequence:
           # save end_time
           - service: input_text.set_value
@@ -525,12 +529,16 @@ action:
                     {% set dict_var = states(appliance_helper) | from_json %}
                     
                     {% if add_duration_tracking_to_end_notification == true %}
-                      {% set duration_seconds = (dict_var.end_time | as_datetime - dict_var.start_time | as_datetime).total_seconds() %}
-                      {% set hours = (duration_seconds // 3600) | int %}
-                      {% set minutes = ((duration_seconds % 3600) // 60) | int %}
-                      {% set seconds = (duration_seconds % 60) | int %}
-                      {% set duration = "%02d:%02d:%02d" | format(hours, minutes, seconds) | string %}
-                      {% set text = text + '\n' + duration_notification_text + duration %}
+                      {% if dict_var.start_time is not none and dict_var.end_time is not none %}
+                        {% set duration_seconds = (dict_var.end_time | as_datetime - dict_var.start_time | as_datetime).total_seconds() %}
+                        {% set hours = (duration_seconds // 3600) | int %}
+                        {% set minutes = ((duration_seconds % 3600) // 60) | int %}
+                        {% set seconds = (duration_seconds % 60) | int %}
+                        {% set duration = "%02d:%02d:%02d" | format(hours, minutes, seconds) | string %}
+                        {% set text = text + '\n' + duration_notification_text + duration %}
+                      {% else %}
+                        {% set text = text + '\n' + duration_notification_text + 'Unbekannt' %}
+                      {% endif %}
                     {% endif %}
 
                     {% if add_energy_tracking_to_end_notification == true %}
