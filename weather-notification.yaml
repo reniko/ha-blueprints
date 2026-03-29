@@ -39,7 +39,7 @@ blueprint:
       selector:
         text: {}
         
-mode: single
+mode: restart
 
 trigger:
   - platform: state
