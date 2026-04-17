@@ -1,5 +1,5 @@
 blueprint:
-  name: Climate Control (Climate + Heater + Vent) with PV/Forecast, Logging & Push (v 2.4.0)
+  name: Climate Control (Climate + Heater + Vent) with PV/Forecast, Logging & Push (v 2.4.1)
   description: >
     Controls a climate entity and/or an external heater (switch/plug) based on
     inside/outside temperatures, prioritizes PV energy usage, optionally uses
@@ -413,8 +413,13 @@ trigger:
     id: scheduled
 
 condition:
-  - condition: time
-    after: !input datetime_helper
+  - condition: or
+    conditions:
+      - condition: trigger
+        id: scheduled
+      - condition: template
+        value_template: >-
+          {{ now().timestamp() >= as_timestamp(states(datetime_helper), 0) }}
 
 action:
   - variables:
