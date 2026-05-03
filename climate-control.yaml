@@ -1,5 +1,5 @@
 blueprint:
-  name: Climate Control (Climate + Heater + Vent) with PV/Forecast, Logging & Push (v 2.4.1)
+  name: Climate Control (Climate + Heater + Vent) with PV/Forecast, Logging & Push (v 2.5.0)
   description: >
     Controls a climate entity and/or an external heater (switch/plug) based on
     inside/outside temperatures, prioritizes PV energy usage, optionally uses
@@ -7,6 +7,12 @@ blueprint:
     outside conditions are favorable.
 
     Adds: EVCC PV surplus option.
+
+    Changes in v2.5.0:
+    - added climate_can_cool flag: disabling falls back from COOL to VENT (fan_only)
+      instead of calling climate.set_temperature with hvac_mode=cool
+    - added climate_can_heat flag: disabling skips climate heating, uses external
+      heater switch only
 
     Changes in v2.4.0:
     - removed persistent notification output
@@ -309,6 +315,26 @@ blueprint:
       selector:
         text: {}
 
+    climate_can_cool:
+      name: Climate entity supports cooling
+      description: >
+        Disable if the climate entity cannot cool (e.g. defective or fan-only).
+        When disabled, COOL falls back to VENT (fan_only) instead of calling
+        climate.set_temperature with hvac_mode=cool, which prevents error states.
+      default: true
+      selector:
+        boolean: {}
+
+    climate_can_heat:
+      name: Climate entity supports heating
+      description: >
+        Disable if the climate entity cannot heat (e.g. defective). When
+        disabled, HEAT uses only the external heater switch. If no heater switch
+        is configured either, HEAT becomes OFF.
+      default: true
+      selector:
+        boolean: {}
+
     mode_helper:
       name: Optional helper to store current mode (input_text)
       description: >
@@ -331,6 +357,8 @@ variables:
   pv_surplus_sensor: !input pv_surplus_sensor
   pv_remaining_surplus_sensor: !input pv_remaining_surplus_sensor
   climate_entity: !input climate_entity
+  climate_can_cool: !input climate_can_cool
+  climate_can_heat: !input climate_can_heat
   heater_switch: !input heater_switch
   vent_switch: !input vent_switch
   datetime_helper: !input datetime_helper
@@ -588,9 +616,11 @@ action:
       effective_mode: >-
         {% set m = desired_mode %}
         {% if m == 'HEAT' %}
-          {% if has_heater or has_climate %}HEAT{% else %}OFF{% endif %}
+          {% if has_heater or (has_climate and climate_can_heat) %}HEAT{% else %}OFF{% endif %}
         {% elif m == 'COOL' %}
-          {% if has_climate %}COOL{% elif has_vent_switch %}VENT{% else %}OFF{% endif %}
+          {% if has_climate and climate_can_cool %}COOL
+          {% elif has_vent_switch or has_climate %}VENT
+          {% else %}OFF{% endif %}
         {% elif m == 'VENT' %}
           {% if has_climate or has_vent_switch %}VENT{% else %}OFF{% endif %}
         {% else %}
@@ -641,7 +671,7 @@ action:
 
               - conditions:
                   - condition: template
-                    value_template: "{{ has_climate }}"
+                    value_template: "{{ has_climate and climate_can_heat }}"
                 sequence:
                   - action: climate.set_temperature
                     target:
@@ -683,7 +713,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ has_climate }}"
+                    value_template: "{{ has_climate and climate_can_cool }}"
                 sequence:
                   - action: climate.set_temperature
                     target:
