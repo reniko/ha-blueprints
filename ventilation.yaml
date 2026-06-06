@@ -1,4 +1,4 @@
-# Ventilation Recommendation (forecast + hysteresis, v0.8.6)
+# Ventilation Recommendation (forecast + hysteresis, v0.8.7)
 # -----------------------------------------------------------------
 # Calculates whether window ventilation is recommended for a single room.
 # - Core checks: ΔT (with open/close hysteresis) & ΔTaupunkt
@@ -11,7 +11,7 @@
 # - Debug‑Log via logbook.log
 # -----------------------------------------------------------------
 blueprint:
-  name: Ventilation Recommendation (forecast + hysteresis, v0.8.6)
+  name: Ventilation Recommendation (forecast + hysteresis, v0.8.7)
   description: >
     Recommends opening / closing windows for passive cooling per room,
     using temperature & dew‑point deltas with hysteresis, forecast‑based
@@ -187,10 +187,10 @@ variables:
   debug_log: !input debug_log
 
   # sensor values numeric ----------------------------------------------
-  temp_in: "{{ states(temp_in_ent)|float }}"
-  temp_out: "{{ states(temp_out_ent)|float }}"
-  dew_in: "{{ states(dew_in_ent)|float }}"
-  dew_out: "{{ states(dew_out_ent)|float }}"
+  temp_in: "{{ states(temp_in_ent)|float(0) }}"
+  temp_out: "{{ states(temp_out_ent)|float(0) }}"
+  dew_in:   "{{ states(dew_in_ent)|float(0) }}"
+  dew_out:  "{{ states(dew_out_ent)|float(0) }}"
   enth_in: "{{ states(enth_in_ent)|float(default=0) }}"
   enth_out: "{{ states(enth_out_ent)|float(default=0) }}"
   f_low: "{{ states(f_low_ent)|float(default=99) }}"
@@ -199,6 +199,11 @@ variables:
   heating_on: "{{ is_state(heat_ent, 'on') }}"
 
   # delta & status ------------------------------------------------------
+  sensors_ok: >
+    {{ states(temp_in_ent) not in ['unavailable', 'unknown', 'none']
+       and states(temp_out_ent) not in ['unavailable', 'unknown', 'none']
+       and states(dew_in_ent) not in ['unavailable', 'unknown', 'none']
+       and states(dew_out_ent) not in ['unavailable', 'unknown', 'none'] }}
   delta_t: "{{ temp_in - temp_out }}"
   delta_dew: "{{ dew_in - dew_out }}"
   overheat: "{{ temp_in > comfort_val + over_margin }}"
@@ -247,7 +252,7 @@ variables:
     {% else %} true {% endif %}
 
   # --- Final recommendation -------------------------------------------
-  should_vent: "{{ temp_ok and dew_ok and enth_ok and forecast_ok and not heating_on and timeframe_ok }}"
+  should_vent: "{{ sensors_ok and temp_ok and dew_ok and enth_ok and forecast_ok and not heating_on and timeframe_ok }}"
 
 trigger:
   - platform: time_pattern
