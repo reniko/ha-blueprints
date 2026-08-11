@@ -5,5 +5,5 @@
     "config:best-practices",
     ":assignee(reniko)",
     ":separateMajorReleases"
-  ],
+  ]
 }
