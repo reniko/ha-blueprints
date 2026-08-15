@@ -12,53 +12,51 @@ blueprint:
       name: Day offset
       description: Wieviele Tage im Voraus erinnert werden soll (1 = morgen, 0 = heute usw.)
       default: 1
+      selector:
+        number:
+          min: 0
+          max: 14
+          mode: box
     reminder_title:
       name: Reminder title
       default: Garbage reminder
     reminder_message:
       name: Reminder message
       default: 'Morgen wird abgeholt: '
-    notifier:
-      name: Notifier
-      description: z.B. notify.notify
-      default: notify.notify
 
-    garbage_sensor_1:
-      name: Garbage sensor 1
+    notify_entities:
+      name: Notify-Entities
+      description: >-
+        Moderne Notify-Entities, z.B. die der SMTP-Integration. Ersetzt das
+        veraltete notify.smtp, das in HA 2027.3.0 entfernt wird.
+      default: []
+      selector:
+        entity:
+          filter:
+            - domain:
+                - notify
+          multiple: true
+
+    notify_services:
+      name: Notify-Services (Legacy)
+      description: >-
+        Klassische Notify-Services, die (noch) kein Entity-Äquivalent haben, z.B.
+        notify.parent_notification_group oder notify.telegram. Voller Servicename
+        inklusive "notify.".
+      default: []
+      selector:
+        text:
+          multiple: true
+
+    garbage_sensors:
+      name: Müll-Sensoren
+      description: Beliebig viele Sensoren, die das Resttage-Attribut tragen
       selector:
         entity:
           filter:
             - domain:
                 - sensor
-          multiple: false
-      default: ''
-    garbage_sensor_2:
-      name: Garbage sensor 2
-      selector:
-        entity:
-          filter:
-            - domain:
-                - sensor
-          multiple: false
-      default: ''
-    garbage_sensor_3:
-      name: Garbage sensor 3
-      selector:
-        entity:
-          filter:
-            - domain:
-                - sensor
-          multiple: false
-      default: ''
-    garbage_sensor_4:
-      name: Garbage sensor 4
-      selector:
-        entity:
-          filter:
-            - domain:
-                - sensor
-          multiple: false
-      default: ''
+          multiple: true
 
     # Name des Attributs mit der Restzeit – bei dir "daysTo"
     garbage_sensor_days_attr:
@@ -69,39 +67,48 @@ blueprint:
   source_url: https://github.com/reniko/ha-blueprints/blob/main/garbage-reminder.yaml
 
 variables:
-  garbage_sensor_1: !input garbage_sensor_1
-  garbage_sensor_2: !input garbage_sensor_2
-  garbage_sensor_3: !input garbage_sensor_3
-  garbage_sensor_4: !input garbage_sensor_4
+  garbage_sensors: !input garbage_sensors
+  notify_entities: !input notify_entities
   reminder_title: !input reminder_title
   reminder_message: !input reminder_message
   day_offset: !input day_offset
   garbage_sensor_days_attr: !input garbage_sensor_days_attr
 
-  # Baue eine Liste (Friendly Name, daysTo) und filtere auf gewünschten Offset
+  # Friendly Names aller Sensoren, deren Resttage dem gewünschten Offset entsprechen
   sensors_due: >-
-    {{
-      [
-        (state_attr(garbage_sensor_1, 'friendly_name'), state_attr(garbage_sensor_1, garbage_sensor_days_attr)),
-        (state_attr(garbage_sensor_2, 'friendly_name'), state_attr(garbage_sensor_2, garbage_sensor_days_attr)),
-        (state_attr(garbage_sensor_3, 'friendly_name'), state_attr(garbage_sensor_3, garbage_sensor_days_attr)),
-        (state_attr(garbage_sensor_4, 'friendly_name'), state_attr(garbage_sensor_4, garbage_sensor_days_attr))
-      ]
-      | selectattr('1', 'equalto', day_offset | int)
-      | map(attribute=0)
-      | join(', ')
-    }}
+    {%- set ns = namespace(names=[]) -%}
+    {%- for s in garbage_sensors -%}
+      {%- if state_attr(s, garbage_sensor_days_attr) | int(-999) == day_offset | int(-1) -%}
+        {%- set ns.names = ns.names + [state_attr(s, 'friendly_name') or s] -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {{ ns.names | join(', ') }}
 
-trigger:
-  - platform: time
+triggers:
+  - trigger: time
     at: !input reminder_time
 
-condition:
+conditions:
   - condition: template
     value_template: "{{ sensors_due != '' }}"
 
-action:
-  - service: !input notifier
-    data:
-      title: "{{ reminder_title }}"
-      message: "{{ reminder_message }}{{ sensors_due }}"
+actions:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ notify_entities | count > 0 }}"
+        sequence:
+          - action: notify.send_message
+            target:
+              entity_id: !input notify_entities
+            data:
+              title: "{{ reminder_title }}"
+              message: "{{ reminder_message }}{{ sensors_due }}"
+
+  - repeat:
+      for_each: !input notify_services
+      sequence:
+        - action: "{{ repeat.item }}"
+          data:
+            title: "{{ reminder_title }}"
+            message: "{{ reminder_message }}{{ sensors_due }}"
