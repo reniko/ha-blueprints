@@ -1,0 +1,127 @@
+alias: Bewässerungs-Sequenz (Aktionen)
+description: Führt die eigentliche Bewässerung aus (ausgelagert aus der Automatisierung)
+mode: single
+sequence:
+  - repeat:
+      for_each:
+        - valve: valve.vorne
+          timer: timer.irrigation_lawn_front
+          runtime: input_number.lawn_front_runtime
+          last_irrigation: input_datetime.lawn_last_irrigation
+          bucket: input_number.lawn_bucket
+          maxb: input_number.lawn_bucket_max
+          flow: input_number.lawn_front_flow
+          area: input_number.lawn_front_size
+          notify_tag: watering_vorne
+          notify_title: Bewässern Rasen vorne
+        - valve: valve.hinten
+          timer: timer.irrigation_lawn_back
+          runtime: input_number.lawn_back_runtime
+          last_irrigation: input_datetime.lawn_last_irrigation
+          bucket: input_number.lawn_bucket
+          maxb: input_number.lawn_bucket_max
+          flow: input_number.lawn_back_flow
+          area: input_number.lawn_back_size
+          notify_tag: watering_hinten
+          notify_title: Bewässern Rasen hinten
+        - valve: valve.hecke
+          timer: timer.irrigation_hedge
+          runtime: input_number.hedge_runtime
+          last_irrigation: input_datetime.hedge_last_irrigation
+          bucket: input_number.hedge_bucket
+          maxb: input_number.hedge_bucket_max
+          flow: input_number.hedge_flow
+          area: input_number.hedge_size
+          notify_tag: watering_hedge
+          notify_title: Bewässern Hecke
+      sequence:
+        - variables:
+            run_minutes: '{{ states(repeat.item.runtime) | int(0) }}'
+        - if:
+            - condition: template
+              value_template: '{{ run_minutes > 0 }}'
+          then:
+            - choose:
+                - conditions:
+                    - condition: not
+                      conditions:
+                        - condition: state
+                          entity_id: lawn_mower.carlito
+                          state: docked
+                          enabled: false
+                      enabled: false
+                  sequence:
+                    - data:
+                        title: Carlito muss parken
+                        message: Bewässerung startet gleich, schicke Mäher ins Dock.
+                        data:
+                          channel: watering
+                      action: notify.admin_notification_group
+                      enabled: false
+                    - target:
+                        entity_id: lawn_mower.carlito
+                      action: lawn_mower.dock
+                      enabled: false
+                    - wait_for_trigger:
+                        - trigger: state
+                          entity_id: lawn_mower.carlito
+                          to: docked
+                          enabled: false
+                      timeout: '00:20:00'
+                      continue_on_timeout: false
+                      enabled: false
+              enabled: false
+            - data:
+                title: '{{ repeat.item.notify_title }}'
+                message: Starte Bewässerung für {{ run_minutes }} min
+                data:
+                  tag: '{{ repeat.item.notify_tag }}'
+                  sticky: false
+                  channel: watering
+              action: notify.admin_notification_group
+            - target:
+                entity_id: '{{ repeat.item.valve }}'
+              action: valve.open_valve
+              data: {}
+            - target:
+                entity_id: '{{ repeat.item.timer }}'
+              data:
+                duration: '{{ run_minutes * 60 }}'
+              action: timer.start
+            - wait_template: '{{ is_state(repeat.item.timer, ''idle'') }}'
+            - target:
+                entity_id: '{{ repeat.item.valve }}'
+              action: valve.close_valve
+            - data:
+                title: '{{ repeat.item.notify_title }}'
+                message: Bewässerung nach {{ run_minutes }} min beendet
+                data:
+                  tag: '{{ repeat.item.notify_tag }}'
+                  sticky: false
+                  channel: watering
+              action: notify.admin_notification_group
+            - variables:
+                water_added: >
+                  {% set flow_val = states(repeat.item.flow) | float(1) %} {%
+                  set area_val = states(repeat.item.area) | float(1) %} {{
+                  (run_minutes * flow_val) / area_val }}
+                new_bucket_calc: |
+                  {{ states(repeat.item.bucket) | float(0) + water_added }}
+                maxb_val: '{{ states(repeat.item.maxb) | float(40) }}'
+                final_bucket: |
+                  {{ new_bucket_calc if new_bucket_calc < maxb_val else maxb_val }}
+            - target:
+                entity_id: '{{ repeat.item.bucket }}'
+              data:
+                value: '{{ final_bucket | round(1) }}'
+              action: input_number.set_value
+            - target:
+                entity_id: '{{ repeat.item.runtime }}'
+              data:
+                value: 0
+              action: input_number.set_value
+            - target:
+                entity_id: '{{ repeat.item.last_irrigation }}'
+              data:
+                datetime: '{{ now() }}'
+              action: input_datetime.set_datetime
