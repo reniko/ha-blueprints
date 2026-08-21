@@ -1,72 +1,103 @@
 alias: Tägliche Et0-Bilanz & Laufzeit
-description: ""
+description: ''
 triggers:
-  - at: "23:55:00"
+  - at: '23:55:00'
     trigger: time
 actions:
   - repeat:
       for_each:
-        - bucket: input_number.lawn_back_bucket
-          size: input_number.lawn_back_size
-          bucket_name: hinten
-          runtime: input_number.lawn_back_runtime
-        - bucket: input_number.lawn_front_bucket
-          size: input_number.lawn_front_size
-          bucket_name: vorne
-          runtime: input_number.lawn_front_runtime
+        - bucket: input_number.lawn_bucket
+          area_name: rasen
+          factor: '{{ states(''input_number.lawn_et0_factor'') | float(1) }}'
+          maxb: '{{ states(''input_number.lawn_bucket_max'') | float(40) }}'
+        - bucket: input_number.hedge_bucket
+          area_name: hecke
+          factor: '{{ states(''input_number.hedge_et0_factor'') | float(1) }}'
+          maxb: '{{ states(''input_number.hedge_bucket_max'') | float(40) }}'
       sequence:
         - variables:
             new_bucket: >
-              {% set old = states(repeat.item.bucket) | float(maxb) %}  {% set
-              val = [ old - (et0 * factor) + rain, 0, maxb ] | sort %} {{
-              val[1]}}
+              {% set old = states(repeat.item.bucket) | float(repeat.item.maxb)
+              %}   {% set val = [ old - (et0 * (repeat.item.factor | float(1)))
+              + rain, 0, repeat.item.maxb ] | sort %}  {{ val[1] }}
             diff: >
-              {% set old = states(repeat.item.bucket) | float(maxb) %}  {% set
-              val = new_bucket - old %} {{ val }}
+              {% set old = states(repeat.item.bucket) | float(repeat.item.maxb)
+              %} {% set val = new_bucket - old %} {{ val }}
         - target:
-            entity_id: "{{ repeat.item.bucket }}"
+            entity_id: '{{ repeat.item.bucket }}'
           data:
-            value: "{{ new_bucket }}"
+            value: '{{ new_bucket }}'
           action: input_number.set_value
-          enabled: true
+        - action: notify.admin_notification_group
+          data:
+            title: Bucket {{repeat.item.area_name}}
+            message: 'Bucket: {{new_bucket|round(1)}} mm ({{diff|round(1)}} mm)'
+            data:
+              tag: bucket_{{repeat.item.area_name}}
+              sticky: false
+              channel: watering
+  - repeat:
+      for_each:
+        - bucket: '{{ states(''input_number.lawn_bucket'') | float(0) }}'
+          threshold: >-
+            {{ states('input_number.lawn_bucket_preemtive_threshold') |
+            float(25) }}
+          maxb: '{{ states(''input_number.lawn_bucket_max'') | float(40) }}'
+          flow: '{{ states(''input_number.lawn_front_flow'') | float(45) }}'
+          area: '{{ states(''input_number.lawn_front_size'') | float(160) }}'
+          runtime: input_number.lawn_front_runtime
+          area_name: Rasen vorne
+        - bucket: '{{ states(''input_number.lawn_bucket'') | float(0) }}'
+          threshold: >-
+            {{ states('input_number.lawn_bucket_preemtive_threshold') |
+            float(25) }}
+          maxb: '{{ states(''input_number.lawn_bucket_max'') | float(40) }}'
+          flow: '{{ states(''input_number.lawn_back_flow'') | float(45) }}'
+          area: '{{ states(''input_number.lawn_back_size'') | float(160) }}'
+          runtime: input_number.lawn_back_runtime
+          area_name: Rasen hinten
+        - bucket: '{{ states(''input_number.hedge_bucket'') | float(0) }}'
+          threshold: >-
+            {{ states('input_number.hedge_bucket_preemtive_threshold') |
+            float(25) }}
+          maxb: '{{ states(''input_number.hedge_bucket_max'') | float(40) }}'
+          flow: '{{ states(''input_number.hedge_flow'') | float(20) }}'
+          area: '{{ states(''input_number.hedge_size'') | float(300) }}'
+          runtime: input_number.hedge_runtime
+          area_name: Hecke
+      sequence:
         - choose:
             - conditions:
                 - condition: template
-                  value_template: "{{ new_bucket < threshold }}"
+                  value_template: '{{ repeat.item.bucket < repeat.item.threshold }}'
               sequence:
                 - variables:
-                    deficit: "{{ maxb - new_bucket }}"
-                    flow: "{{ states('input_number.lawn_throughput') | float(45) }}"
-                    area: "{{ states(repeat.item.size) | float(160) }}"
-                    minutes: "{{ (deficit / (flow / area)) | round(0) }}"
+                    deficit: '{{ repeat.item.maxb - repeat.item.bucket }}'
+                    minutes: >
+                      {% set denom = (repeat.item.flow | float(1)) /
+                      (repeat.item.area | float(1)) %} {{ (deficit / denom) |
+                      round(0) }}
                 - target:
-                    entity_id: "{{ repeat.item.runtime }}"
+                    entity_id: '{{ repeat.item.runtime }}'
                   data:
-                    value: "{{ minutes }}"
+                    value: '{{ minutes }}'
                   action: input_number.set_value
-                  enabled: true
                 - action: notify.admin_notification_group
                   data:
-                    title: Bucket {{repeat.item.bucket_name}}
-                    message: >-
-                      Bucket: {{new_bucket|round(1)}} mm ({{diff|round(1)}} mm)
-                      Runtime: {{minutes|round(1)}} min
+                    title: Laufzeit {{repeat.item.area_name}}
+                    message: 'Laufzeit: {{minutes|round(1)}} min'
                     data:
-                      tag: bucket_{{repeat.item.bucket_name}}
+                      tag: runtime_{{repeat.item.area_name}}
                       sticky: false
                       channel: watering
           default:
-            - action: notify.admin_notification_group
+            - target:
+                entity_id: '{{ repeat.item.runtime }}'
               data:
-                title: Bucket {{repeat.item.bucket_name}}
-                message: "Bucket: {{new_bucket|round(1)}} mm ({{diff|round(1)}} mm)"
-                data:
-                  tag: bucket_{{repeat.item.bucket_name}}
-                  sticky: false
-                  channel: watering
+                value: 0
+              action: input_number.set_value
 variables:
-  et0: "{{ states('sensor.open_meteo_et0_mm')                     | float(0) }}"
-  factor: "{{ states('input_number.lawn_et0_factor')                 | float(1) }}"
-  rain: "{{ states('sensor.rain_today_mm')                         | float(0) }}"
-  maxb: "{{ states('input_number.lawn_bucket_max')                 | float(40) }}"
-  threshold: "{{ states('input_number.lawn_bucket_preemtive_threshold') | float(15) }}"
+  et0: '{{ states(''sensor.open_meteo_et0_mm'') | float(0) }}'
+  rain: '{{ states(''sensor.irrigation_rain_today_mm'') | float(0) }}'
+trace:
+  stored_traces: 25
