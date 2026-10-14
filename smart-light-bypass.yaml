@@ -1,7 +1,12 @@
 blueprint:
-  name: Motion-Triggered Light with Bypass (v1.1)
-  description: Turns the light on/off based on motion and ambient light. Includes a physical bypass switch (e.g. Shelly Input) with an optional auto-off timer.
+  name: Motion-Triggered Light with Bypass (v1.2)
+  description: >
+    Turns the light on/off based on motion and ambient light. Includes a
+    physical bypass switch (e.g. Shelly Input) with an optional auto-off timer.
+    When the timer expires, the light turns off (unless there is motion) and
+    motion control takes over again, even while the switch stays on.
   domain: automation
+  source_url: https://github.com/reniko/ha-blueprints/blob/main/smart-light-bypass.yaml
   input:
     motion_sensor:
       name: Motion Sensor (or Group)
@@ -49,7 +54,7 @@ blueprint:
             - input_boolean
     bypass_auto_off_minutes:
       name: Bypass Auto-Off (Minutes)
-      description: After how many minutes should the bypass (always-on mode) be canceled? (0 = infinite)
+      description: After how many minutes should the bypass (always-on mode) expire? Afterwards motion controls the light again, even if the switch is still on. (0 = never)
       default: 0
       selector:
         number:
@@ -66,6 +71,15 @@ variables:
   light_entity: !input target_light
   bypass_entity: !input bypass_switch
   auto_off_min: !input bypass_auto_off_minutes
+  # Bypass counts only while it is on and, with an auto-off time, not older than that
+  bypass_active: >
+    {% set s = states[bypass_entity] %}
+    {{ s is not none and s.state == 'on' and
+       (auto_off_min | float(0) <= 0 or
+        (now() - s.last_changed).total_seconds() < auto_off_min | float(0) * 60) }}
+
+trigger_variables:
+  auto_off_trig: !input bypass_auto_off_minutes
 
 trigger:
   # 1. Motion detected
@@ -94,6 +108,16 @@ trigger:
     to: 'off'
     id: 'bypass_off'
 
+  # 5. Bypass on for the auto-off time (a trigger, so a motion run cannot cancel it).
+  #    With 0 (never) it must not fire together with bypass_on: mode restart would
+  #    cancel that run, so it waits practically forever instead.
+  - platform: state
+    entity_id: !input bypass_switch
+    to: 'on'
+    for:
+      minutes: "{{ auto_off_trig | int(0) if auto_off_trig | int(0) > 0 else 525600 }}"
+    id: 'bypass_expired'
+
 action:
   - choose:
       # ==========================================
@@ -106,17 +130,23 @@ action:
           - service: light.turn_on
             target:
               entity_id: !input target_light
-          # If Auto-Off > 0, wait and then turn off
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ auto_off_min | float > 0 }}"
-                sequence:
-                  - delay:
-                      minutes: "{{ auto_off_min | int }}"
-                  - service: light.turn_off
-                    target:
-                      entity_id: !input target_light
+
+      # ==========================================
+      # SCENARIO E: BYPASS AUTO-OFF TIME REACHED
+      # ==========================================
+      - conditions:
+          - condition: trigger
+            id: 'bypass_expired'
+          - condition: template
+            value_template: "{{ auto_off_min | float(0) > 0 }}"
+          # No motion right now -> off; otherwise motion_off turns it off later
+          - condition: state
+            entity_id: !input motion_sensor
+            state: 'off'
+        sequence:
+          - service: light.turn_off
+            target:
+              entity_id: !input target_light
 
       # ==========================================
       # SCENARIO B: MANUAL SWITCH IS TURNED OFF
@@ -145,10 +175,9 @@ action:
       - conditions:
           - condition: trigger
             id: 'motion_on'
-          # Ignore motion if manual switch is on
-          - condition: state
-            entity_id: !input bypass_switch
-            state: 'off'
+          # Ignore motion while the bypass is active
+          - condition: template
+            value_template: "{{ not bypass_active }}"
           # Turn on only if it is dark OR the light is already on
           - condition: template
             value_template: >
@@ -165,10 +194,9 @@ action:
       - conditions:
           - condition: trigger
             id: 'motion_off'
-          # Turn off only if the manual switch is NOT on
-          - condition: state
-            entity_id: !input bypass_switch
-            state: 'off'
+          # Turn off only while the bypass is not active
+          - condition: template
+            value_template: "{{ not bypass_active }}"
         sequence:
           - service: light.turn_off
             target:

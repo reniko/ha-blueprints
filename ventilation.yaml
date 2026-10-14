@@ -65,7 +65,8 @@ blueprint:
         entity:
           domain: sensor
     window_sensors:
-      name: Window contacts (optional)
+      name: Window contacts (not evaluated)
+      description: Reserved; the recommendation does not read this input.
       default: []
       selector:
         entity:
