@@ -15,17 +15,15 @@ blueprint:
   input:
     lock_entity:
       name: Lock Entity
-      default: lock.haustur
       selector: { entity: { domain: lock } }
 
     door_sensor:
       name: Door Sensor
-      default: binary_sensor.haustur_door_sensor
       selector: { entity: { domain: binary_sensor } }
 
     notify_target:
       name: Notification Service
-      default: notify.parent_notification_group
+      description: Notify service, e.g. notify.mobile_app_<device> or a notify group
       selector: { text: {} }
 
     time_start:
