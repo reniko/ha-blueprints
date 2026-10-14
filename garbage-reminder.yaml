@@ -41,7 +41,7 @@ blueprint:
       name: Notify-Services (Legacy)
       description: >-
         Klassische Notify-Services, die (noch) kein Entity-Äquivalent haben, z.B.
-        notify.parent_notification_group oder notify.telegram. Voller Servicename
+        eine YAML-Notify-Gruppe oder notify.telegram. Voller Servicename
         inklusive "notify.".
       default: []
       selector:
