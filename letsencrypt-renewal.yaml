@@ -1,0 +1,113 @@
+blueprint:
+  name: Let's Encrypt Renewal
+  description: >
+    • Checks the certificate once a day and starts the Let's Encrypt add-on
+      when it expires within the configured number of days (or when the
+      expiry sensor has no value)
+    • Optionally restarts the proxy add-on afterwards
+    • Re-reads the Certificate Expiry sensor and runs the success actions only
+      when the expiry date has actually moved, otherwise the failure actions
+    • `days_left` is available in both action lists, e.g. in a message
+  domain: automation
+  source_url: https://github.com/reniko/ha-blueprints/blob/main/letsencrypt-renewal.yaml
+
+  input:
+    cert_expiry_sensor:
+      name: Certificate Expiry Sensor
+      description: Sensor of the Certificate Expiry integration
+      selector: { entity: { integration: cert_expiry, domain: sensor } }
+
+    renew_days:
+      name: Renew Below (days)
+      default: 29
+      selector: { number: { min: 1, max: 60, unit_of_measurement: days, mode: box } }
+
+    check_time:
+      name: Check Time
+      default: "02:00:00"
+      selector: { time: {} }
+
+    letsencrypt_addon:
+      name: Let's Encrypt Add-on (slug)
+      default: core_letsencrypt
+      selector: { text: {} }
+
+    restart_proxy:
+      name: Restart Proxy Add-on
+      default: true
+      selector: { boolean: {} }
+
+    proxy_addon:
+      name: Proxy Add-on (slug)
+      default: core_nginx_proxy
+      selector: { text: {} }
+
+    wait_minutes:
+      name: Wait for Let's Encrypt (minutes)
+      description: Time the Let's Encrypt add-on gets before the proxy is restarted and the certificate is checked
+      default: 5
+      selector: { number: { min: 1, max: 60, unit_of_measurement: min, mode: box } }
+
+    success_action:
+      name: Success Actions
+      description: Run when the certificate is valid for more than "Renew Below" days afterwards
+      default: []
+      selector: { action: {} }
+
+    failure_action:
+      name: Failure Actions
+      description: Run when the certificate still expires within "Renew Below" days, or the sensor has no value
+      default: []
+      selector: { action: {} }
+
+mode: single
+
+variables:
+  cert_sensor: !input cert_expiry_sensor
+  renew_days: !input renew_days
+  restart_proxy: !input restart_proxy
+  days_left_before: >-
+    {{ ((as_timestamp(states(cert_sensor), 0) - as_timestamp(now())) / 86400) | int }}
+
+triggers:
+  - trigger: time
+    at: !input check_time
+
+conditions:
+  - condition: template
+    value_template: "{{ not has_value(cert_sensor) or days_left_before < renew_days }}"
+
+actions:
+  - action: hassio.addon_start
+    data:
+      addon: !input letsencrypt_addon
+
+  - delay:
+      minutes: !input wait_minutes
+
+  - if:
+      - condition: template
+        value_template: "{{ restart_proxy }}"
+    then:
+      - action: hassio.addon_restart
+        data:
+          addon: !input proxy_addon
+      - delay:
+          minutes: 1
+
+  # The sensor polls on its own schedule; force a fresh read of the served certificate
+  - action: homeassistant.update_entity
+    target:
+      entity_id: !input cert_expiry_sensor
+  - delay:
+      seconds: 30
+
+  - variables:
+      days_left: >-
+        {{ ((as_timestamp(states(cert_sensor), 0) - as_timestamp(now())) / 86400) | int }}
+
+  - if:
+      - condition: template
+        value_template: "{{ has_value(cert_sensor) and days_left > renew_days }}"
+    then: !input success_action
+    else: !input failure_action
