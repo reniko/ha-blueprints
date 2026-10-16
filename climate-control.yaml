@@ -97,13 +97,16 @@ blueprint:
         ONLY allowed when this entity is ON. Intended for evcc surplus control.
 
         IMPORTANT:
-        When this entity is configured, these parameters are ignored:
+        When this entity is configured, its state alone decides whether PV
+        energy may be used. These inputs are then not evaluated (the two
+        sensors only appear in logbook and notification texts):
+        - pv_surplus_sensor
+        - pv_remaining_surplus_sensor
         - minimum_pv_surplus_for_preemptive_heating
         - minimum_pv_surplus_for_preemptive_cooling
 
-        The remaining surplus sensor (kWh) is still used as safety limit. If
-        empty, the blueprint falls back to pv_surplus_sensor thresholds (legacy
-        behavior).
+        If empty, the blueprint uses pv_surplus_sensor against the minimum
+        surplus thresholds plus pv_remaining_surplus_sensor (legacy behavior).
       default: null
       selector:
         entity:
