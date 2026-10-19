@@ -1,0 +1,276 @@
+blueprint:
+  name: Maintenance reminder
+  description: >
+    Reminds about a recurring maintenance task (e.g. replacing a filter).
+    The next due date lives in an input_datetime, so it can be postponed by
+    editing it. Ahead of the due date an advance notice is sent; from the due
+    date on, an item is kept on a to-do list and the notification repeats
+    until the task is done. The task counts as done when the button is
+    pressed or the to-do item is checked off: the due date then moves to
+    today plus the interval and the item is removed. Moving the due date into
+    the future removes an open item at the next reminder time.
+  domain: automation
+  source_url: https://github.com/reniko/ha-blueprints/blob/main/maintenance-reminder.yaml
+  input:
+    task_name:
+      name: Task name
+      description: >-
+        Used in the notifications and as the to-do item. Must be unique on
+        the to-do list.
+      selector:
+        text: {}
+    due_date:
+      name: Due date helper
+      description: >-
+        input_datetime holding the next due date (date only; a time part is
+        ignored).
+      selector:
+        entity:
+          filter:
+            - domain: input_datetime
+    done_button:
+      name: Done button
+      description: input_button to press once the task is done.
+      selector:
+        entity:
+          filter:
+            - domain: input_button
+    todo_list:
+      name: To-do list
+      description: List that gets the item while the task is due.
+      selector:
+        entity:
+          filter:
+            - domain: todo
+    todo_description:
+      name: To-do description
+      description: Optional text for the to-do item, e.g. part numbers or steps.
+      default: ""
+      selector:
+        text:
+          multiline: true
+    interval_days:
+      name: Interval
+      description: Days from completion to the next due date.
+      default: 365
+      selector:
+        number:
+          min: 1
+          max: 3650
+          unit_of_measurement: d
+          mode: box
+    lead_days:
+      name: Advance notice
+      description: Days before the due date for the advance notice (0 = none).
+      default: 14
+      selector:
+        number:
+          min: 0
+          max: 365
+          unit_of_measurement: d
+          mode: box
+    repeat_days:
+      name: Repeat while overdue
+      description: Repeat the notification every this many days while overdue.
+      default: 7
+      selector:
+        number:
+          min: 1
+          max: 90
+          unit_of_measurement: d
+          mode: box
+    reminder_time:
+      name: Reminder time
+      default: '18:00:00'
+      selector:
+        time: {}
+
+    notify_entities:
+      name: Notify entities
+      description: Notify entities, e.g. those of the SMTP integration.
+      default: []
+      selector:
+        entity:
+          filter:
+            - domain: notify
+          multiple: true
+    notify_services:
+      name: Notify services (legacy)
+      description: >-
+        Classic notify services without an entity, e.g. a YAML notify group.
+        Full service name including "notify.".
+      default: []
+      selector:
+        text:
+          multiple: true
+
+    notification_title:
+      name: Notification title
+      default: Maintenance
+    message_upcoming:
+      name: Advance notice text
+      description: 'Placeholders: {task}, {days}, {date}'
+      default: '{task} is due in {days} days ({date}).'
+    message_due:
+      name: Due text
+      description: 'Placeholders: {task}, {date}'
+      default: '{task} is due today.'
+    message_overdue:
+      name: Overdue text
+      description: 'Placeholders: {task}, {days}, {date}'
+      default: '{task} is overdue by {days} days ({date}).'
+    date_format:
+      name: Date format
+      description: strftime format for {date}, e.g. %d.%m.%Y
+      default: '%Y-%m-%d'
+
+mode: queued
+max_exceeded: silent
+
+variables:
+  task: !input task_name
+  due_entity: !input due_date
+  todo_entity: !input todo_list
+  todo_description: !input todo_description
+  interval_days: !input interval_days
+  lead_days: !input lead_days
+  repeat_days: !input repeat_days
+  notify_entities: !input notify_entities
+  notification_title: !input notification_title
+  message_upcoming: !input message_upcoming
+  message_due: !input message_due
+  message_overdue: !input message_overdue
+  date_format: !input date_format
+
+triggers:
+  - trigger: time
+    at: !input reminder_time
+    id: daily
+  - trigger: state
+    entity_id: !input done_button
+    not_to:
+      - unavailable
+      - unknown
+    id: button
+  - trigger: state
+    entity_id: !input todo_list
+    not_to:
+      - unavailable
+      - unknown
+    id: todo
+
+conditions:
+  # A button that is (re)added after a restart or reload is not a press.
+  - condition: template
+    value_template: >-
+      {{ trigger.id != 'button' or (trigger.from_state is not none
+         and trigger.from_state.state != 'unavailable') }}
+
+actions:
+  - action: todo.get_items
+    target:
+      entity_id: !input todo_list
+    data:
+      status:
+        - needs_action
+        - completed
+    response_variable: todo_items
+  - variables:
+      task_items: >-
+        {{ todo_items[todo_entity]['items']
+           | selectattr('summary', 'eq', task) | list }}
+      open_items: >-
+        {{ task_items | selectattr('status', 'eq', 'needs_action') | list }}
+      completed_items: >-
+        {{ task_items | selectattr('status', 'eq', 'completed') | list }}
+      due_iso: "{{ states(due_entity)[:10] }}"
+      days_left: >-
+        {%- set d = strptime(due_iso, '%Y-%m-%d', none) -%}
+        {{ (d.date() - now().date()).days if d is not none else none }}
+
+  - choose:
+      # Done: button pressed or to-do item checked off
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.id == 'button'
+                 or (trigger.id == 'todo' and completed_items | count > 0) }}
+        sequence:
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: !input due_date
+            data:
+              date: >-
+                {{ (now().date() + timedelta(days=interval_days | int)).isoformat() }}
+          - if:
+              - condition: template
+                value_template: "{{ task_items | count > 0 }}"
+            then:
+              - action: todo.remove_item
+                target:
+                  entity_id: !input todo_list
+                data:
+                  item: "{{ task_items | map(attribute='uid') | list }}"
+
+      # Daily check
+      - conditions:
+          - condition: trigger
+            id: daily
+          - condition: template
+            value_template: "{{ days_left is not none }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ days_left <= 0 and open_items | count == 0 }}"
+                sequence:
+                  - action: todo.add_item
+                    target:
+                      entity_id: !input todo_list
+                    data:
+                      item: "{{ task }}"
+                      due_date: "{{ due_iso }}"
+                      description: "{{ todo_description }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ days_left > 0 and open_items | count > 0 }}"
+                sequence:
+                  - action: todo.remove_item
+                    target:
+                      entity_id: !input todo_list
+                    data:
+                      item: "{{ open_items | map(attribute='uid') | list }}"
+          - variables:
+              message: >-
+                {%- set lead = lead_days | int -%}
+                {%- if lead > 0 and days_left == lead -%}
+                  {%- set text = message_upcoming -%}
+                {%- elif days_left == 0 -%}
+                  {%- set text = message_due -%}
+                {%- elif days_left < 0 and (0 - days_left) % (repeat_days | int) == 0 -%}
+                  {%- set text = message_overdue -%}
+                {%- else -%}
+                  {%- set text = '' -%}
+                {%- endif -%}
+                {{ text | replace('{task}', task)
+                        | replace('{days}', days_left | abs | string)
+                        | replace('{date}', strptime(due_iso, '%Y-%m-%d').strftime(date_format)) }}
+          - condition: template
+            value_template: "{{ message | length > 0 }}"
+          - if:
+              - condition: template
+                value_template: "{{ notify_entities | count > 0 }}"
+            then:
+              - action: notify.send_message
+                target:
+                  entity_id: !input notify_entities
+                data:
+                  title: "{{ notification_title }}"
+                  message: "{{ message }}"
+          - repeat:
+              for_each: !input notify_services
+              sequence:
+                - action: "{{ repeat.item }}"
+                  data:
+                    title: "{{ notification_title }}"
+                    message: "{{ message }}"
