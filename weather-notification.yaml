@@ -11,7 +11,7 @@ blueprint:
           domain: input_text
     notify_target:
       name: Notification Service
-      description: The notification service to send messages to (e.g., notify.notification_niko).
+      description: The notification service to send messages to (e.g., notify.mobile_app_<device>).
       selector:
         text: {}
     time_interval:
